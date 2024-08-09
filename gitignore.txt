@@ -8,6 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+.png
 assets/
 build/
 develop-eggs/
