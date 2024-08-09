@@ -37,13 +37,13 @@ class Weather:
 
             if 'hail' in weather_types:
                 self.effects['hail'] = Hail(screen, width=25, height=50, initial_speed=30, acc=20,
-                                            color=(220, 220, 220, 220), flake=True, num_drops=30, pixel=self.pixel)
+                                            color=(220, 220, 220, 220), flake=True, num_drops=40, pixel=self.pixel)
 
             if 'lightning' in weather_types:
                 self.effects['lightning'] = Lightning(screen)
 
             if 'fog' in weather_types:
-                self.effects['fog'] = Fog(screen, color=(200, 200, 200), density=0.1)
+                self.effects['fog'] = Fog(screen, color=(200, 200, 200), density=0.5, pixel=self.pixel)
 
     def update(self) -> None:
         """
@@ -485,22 +485,25 @@ class Fog:
     :param screen: The Pygame screen where the fog will be drawn.
     :param color: The color of the fog.
     :param density: A value between 0 and 1 representing how dense the fog is.
+    :param pixel: If True, It will load a pixelated image.
     """
 
-    def __init__(self, screen: pygame.Surface, color: tuple[int, int, int] = (200, 200, 200), density: float = 0.1):
+    def __init__(self, screen: pygame.Surface, color: tuple[int, int, int] = (200, 200, 200), density: float = 0.5, pixel: bool=False):
         self.screen = screen
         self.screen_w = screen.get_width()
         self.screen_h = screen.get_height()
         self.color = color
         self.density = density  # A value between 0 and 1 representing how dense the fog is
+        self.pixel = pixel
 
         # Load images
         self.img = []
         num_img = 2
-        for n in range(num_img):
-            img = pygame.image.load(f'assets/Noise4.png').convert_alpha()  # Used https://starshinescribbles.itch.io/fogandnoise pack
+        for _ in range(num_img):
+            if pixel: img = pygame.image.load(f'assets/NoisePix.png').convert_alpha()  # Available at https://danialc0.itch.io/tileable-fog 
+            else:     img = pygame.image.load(f'assets/NoiseReg.png').convert_alpha() 
             img = pygame.transform.scale(img, (self.screen_w - 1, self.screen_h * 1.2))
-            img.set_alpha(255)
+            img.set_alpha(int(255*density))
             self.img.append(img)
 
         # Position to start moving the fog from
