@@ -71,7 +71,32 @@ class Weather:
 
         pygame.display.update(upd_rects)  # Update only the rectangles that are changed
 
+    def toggle_effect(self, effect_name: str) -> None:
+        """Toggle the visibility of a specific weather effect."""
+        if effect_name in self.effects:
+            del self.effects[effect_name]
+        else:
+            self.__init__(self.screen, [effect_name] + list(self.effects.keys()))
 
+    def set_wind_speed(self, speed: float)-> None:
+        """Manually set the wind speed."""
+        self.wind.speed = speed
+
+    def set_fog_density(self, density: float)-> None:
+        """Set the density of the fog effect."""
+        if 'fog' in self.effects:
+            self.effects['fog'].density = density
+
+    def set_lightning_frequency(self, frequency: int)-> None:
+        """
+        Set the frequency of lightning strikes. 
+
+        :param frequency: Milliseconds between lightnings +/-20%
+        """
+
+        if 'lightning' in self.effects:
+            self.effects['lightning'].frequency = frequency
+            
 class Precip:
     """
     Base class for precipitation effects such as rain, snow, or hail.
