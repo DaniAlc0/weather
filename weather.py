@@ -4,13 +4,14 @@ import math
 
 
 class Weather:
-    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, pixel: bool = False):
+    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 0, pixel: bool = False):
         """
         Initialize the Weather system.
 
         :param screen: The Pygame screen where the weather effects will be drawn.
         :param weather_types: List of weather effects to initialize.
                               Supported types: 'rain', 'snow', 'hail', 'lightning', 'fog'.
+        :param wind_speed: Maximum wind speed. Positive is right direction and negative is left.
         :param pixel: If True, snow and hail will be drawn as squares instead of circles.
         """
         self.screen = screen
@@ -20,7 +21,7 @@ class Weather:
         if weather_types is None:
             pass
         else:
-            self.wind = Wind(base_max_speed=10, freq_base=0.02)  # Wind is always part of the system
+            self.wind = Wind(wind_speed, freq_base=0.02)  # Wind is always part of the system
 
             if 'rain' in weather_types:
                 self.effects['rain'] = Rain(screen, width=10, height=150, initial_speed=15, acc=50,
@@ -128,6 +129,7 @@ class Precip:
         self.drops = []
         for drop in range(num_drops):
             scale = 0.25 + 0.75 * (num_drops - drop) / num_drops
+            weight = scale
             w, h = int(scale * self.width), int(scale * self.height)
             speed = scale * initial_speed
             acceleration = scale * acc / 100  # The bigger the more it accelerates
@@ -146,12 +148,13 @@ class Precip:
                     pic.fill((r, g, b, int(alphay * alphax)), rect)
 
             if flake:
+                weight **= 2
                 if self.pixel:
                     pygame.draw.rect(pic, (r, g, b, 255), (w // 4, h - w, w // 2, w // 2))
                 else:
                     pygame.draw.circle(pic, (r, g, b, 255), (w // 2, h - w), w // 4)
 
-            new_drop = Precip.Drop(speed, acceleration, pic, screen)
+            new_drop = Precip.Drop(speed, acceleration, weight, pic, screen)
             self.drops.append(new_drop)
 
     def update(self, wind_speed: float = 0) -> list[pygame.Rect]:
@@ -181,13 +184,14 @@ class Precip:
         nexttime = 0  # The next time the drop will draw
         interval = 0.01  # How frequently the drop should draw
 
-        def __init__(self, speed: float, acc: float, pic: pygame.Surface, screen: pygame.Surface):
+        def __init__(self, speed: float, acc: float, weight: float, pic: pygame.Surface, screen: pygame.Surface):
             """
             Initialize a precipitation drop.
 
             :param speed: The initial speed of the drop.
             :param acc: The acceleration of the drop.
             :param pic: The Pygame surface representing the drop.
+            :param: Weight of the drop from 0 to 1. The higher it is the less it's afected by the wind direction
             :param screen: The Pygame screen where the drop will be drawn.
             """
             self.pic = pic
@@ -195,21 +199,23 @@ class Precip:
 
             self.ini_speed = speed
             self.acceleration = acc
+            self.weight = weight
 
             self.screen_w = screen.get_width()
             self.screen_h = screen.get_height()
 
             self.pos = [random.random() * self.screen_w, -random.randint(-self.screen_h, self.screen_h)]
-            self.current_speed = self.ini_speed * random.uniform(1, 1.5)
+            self.current_speed_x = 0
+            self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
 
         def _reset_on_top(self) -> None:
             """Restart the drop at the top of the screen."""
-            self.current_speed = self.ini_speed * random.uniform(1, 1.5)
+            self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
             self.pos = [random.random() * self.screen_w, - self.size[1]]
 
         def _reset_on_sides(self, left: bool) -> None:
             """Restart the drop on one side of the screen."""
-            self.current_speed = self.ini_speed * random.uniform(1, 1.5)
+            self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
             if left:
                 self.pos = [-50, random.random() * self.screen_h]
             else:
@@ -221,7 +227,7 @@ class Precip:
 
             :param screen: The Pygame screen where the drop will be drawn.
             :param now: The current time in seconds.
-            :param wind_speed: The current wind speed affecting the drop.
+            :param wind_speed: The current wind speed affecting the drop current_speed_x.
             :return: The rectangle area where the drop was drawn.
             """
             if now < self.nexttime:
@@ -233,10 +239,12 @@ class Precip:
             rotated_pic = self.pic  # Initialize to the default picture
 
             if wind_speed:
-                self.pos[0] += wind_speed
+                self.current_speed_x += (wind_speed - self.current_speed_x)*(1-self.weight)
+                self.pos[0] += self.current_speed_x
+                print(self.current_speed_x, wind_speed, self.weight )
 
                 # Calculate tilt angle (in radians)
-                tilt_angle = math.atan2(wind_speed, self.current_speed)
+                tilt_angle = math.atan2(self.current_speed_x, self.current_speed_y)
 
                 # Rotate the drop's pic surface
                 rotated_pic = pygame.transform.rotate(self.pic, math.degrees(tilt_angle))
@@ -247,7 +255,7 @@ class Precip:
                 self._reset_on_sides(left=True)
 
             # Update the drop's position
-            self.pos[1] += self.current_speed
+            self.pos[1] += self.current_speed_y
 
             newrect = pygame.Rect(self.pos[0], self.pos[1], self.size[0], self.size[1])
             rect = oldrect.union(newrect)
@@ -255,7 +263,7 @@ class Precip:
             # Draw the rotated drop
             screen.blit(rotated_pic, self.pos)
 
-            self.current_speed += self.acceleration
+            self.current_speed_y += self.acceleration
 
             if self.pos[1] > self.screen_h:
                 self._reset_on_top()
@@ -353,7 +361,7 @@ class Hail(Precip):
 
             if self.pos[1] >= (self.screen_h - 100 - self.size[1]):
                 if self.bounce_count < 3:  # Limit the number of bounces
-                    self.current_speed = -self.current_speed * 0.6  # Lose some speed on bounce
+                    self.current_speed_y = -self.current_speed_y * 0.6  # Lose some speed on bounce
                     self.bounce_count += 1
                 else:
                     self._reset_on_top()
@@ -372,7 +380,7 @@ class Wind:
     :param freq_gusts: The frequency of the gusts.
     """
 
-    def __init__(self, base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 0.5, freq_gusts: float = 0.5):
+    def __init__(self, base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 1, freq_gusts: float = 0.5):
         self.base_max_speed = base_max_speed
         self.base_speed = random.uniform(base_max_speed // 2, base_max_speed)
         self.freq_base = freq_base
@@ -547,7 +555,7 @@ def main():
         # Other game logic here
         
         end_time = time.time()
-        # print(f'Time for each frame: {end_time - start_time:.6f} seconds')
+        print(f'Time for each frame: {end_time - start_time:.6f} seconds')
         
         pygame.display.flip()
         clock.tick(60)
