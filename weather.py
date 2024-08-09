@@ -4,7 +4,7 @@ import math
 
 
 class Weather:
-    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 0, pixel: bool = False):
+    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 10, pixel: bool = False):
         """
         Initialize the Weather system.
 
@@ -79,9 +79,9 @@ class Weather:
         else:
             self.__init__(self.screen, [effect_name] + list(self.effects.keys()))
 
-    def set_wind_speed(self, speed: float)-> None:
+    def set_wind_speed(self, base_max_speed, freq_base)-> None:
         """Manually set the wind speed."""
-        self.wind.speed = speed
+        self.wind.reset(base_max_speed, freq_base, self.wind.max_gusts, self.wind.freq_gusts)
 
     def set_fog_density(self, density: float)-> None:
         """Set the density of the fog effect."""
@@ -128,8 +128,8 @@ class Precip:
 
         self.drops = []
         for drop in range(num_drops):
-            scale = 0.25 + 0.75 * (num_drops - drop) / num_drops
-            weight = scale
+            scale = 0.35 + 0.65 * (num_drops - drop) / num_drops
+            weight = scale*0.9
             w, h = int(scale * self.width), int(scale * self.height)
             speed = scale * initial_speed
             acceleration = scale * acc / 100  # The bigger the more it accelerates
@@ -148,7 +148,7 @@ class Precip:
                     pic.fill((r, g, b, int(alphay * alphax)), rect)
 
             if flake:
-                weight **= 2
+                weight /= 2
                 if self.pixel:
                     pygame.draw.rect(pic, (r, g, b, 255), (w // 4, h - w, w // 2, w // 2))
                 else:
@@ -381,6 +381,9 @@ class Wind:
     """
 
     def __init__(self, base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 1, freq_gusts: float = 0.5):
+        self.reset(base_max_speed, freq_base, max_gusts, freq_gusts)
+    
+    def reset(self, base_max_speed, freq_base, max_gusts, freq_gusts):
         self.base_max_speed = base_max_speed
         self.base_speed = random.uniform(base_max_speed // 2, base_max_speed)
         self.freq_base = freq_base
