@@ -1,6 +1,12 @@
+'''
+WEATHER SIMULATOR
+
+Select the desired conditions on the menu screen and click on "Start Simulation" or press Enter Key. 
+During the simulation you can return to the menu by pressing any button on the keybord.
+'''
+
 import pygame
 from weather import Weather
-
 
 def main():
 
@@ -52,7 +58,7 @@ def main():
 
         def toggle_side(self, wind_dir):
             self.state = not self.state
-            self.text = "Rigth side wind" if not self.state else "Left side wind"
+            self.text = "Right side wind" if not self.state else "Left side wind"
             return -wind_dir
 
         
@@ -66,7 +72,7 @@ def main():
     # GUI Options
     weather_options = ['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog']
     wind_speeds = {'None':0, 'Low': 2, 'Medium': 5, 'High': 10, 'Extreme': 20}
-    wind_dir = +1
+    wind_dir = +1 #Is either +1 or -1 depending on side_wind_button
     selected_weather = []
     wind_speed = 0  # Default to None
     pixel = False
@@ -86,14 +92,16 @@ def main():
     wind_buttons[0].toggle()
 
 
-
     pixel_button = Button("Pixel Mode", (550, 50), (200, 50))
-    side_wind_button = Button("Rigth side wind", (550, 150), (200, 50))
+    side_wind_button = Button("Right side wind", (550, 150), (200, 50))
 
     start_button = Button("Start Simulation", (550, 450), (200, 50), colors=((0, 100, 0), (0, 150, 0)))
 
-    # Run the GUI loop
+    # State booleans
+    simulation_on = False
     running = True
+
+    # Run the GUI loop
     while running:
         screen.fill((30, 30, 30))
 
@@ -113,6 +121,7 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
+                running = False
                 return
 
             elif event.type == pygame.MOUSEMOTION:
@@ -152,33 +161,56 @@ def main():
 
                 if start_button.is_clicked(mouse_pos):
                     selected_weather = [button.text.split(' [')[0] for button in buttons if button.state]
-                    running = False
+                    menu_on = False
+                    simulation_on = True
                  
-                print(wind_speed*wind_dir)
-
         # Start the weather simulation if the user presses the Enter key
         keys = pygame.key.get_pressed()
         if keys[pygame.K_RETURN]:
             selected_weather = [button.text.split(' [')[0] for button in buttons if button.state]
-            running = False
+            simulation_on = True
 
-        pygame.display.flip()
-        clock.tick(30)
 
-    # Weather simulation
-    weather = Weather(screen, weather_types=selected_weather, wind_speed=wind_speed*wind_dir ,pixel=pixel)
+        if simulation_on:
+            weather = Weather(screen, weather_types=selected_weather, wind_speed=wind_speed * wind_dir, pixel=pixel)
+            
+            print("simulating")
+            while simulation_on:
+                
 
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
 
-        screen.fill((0, 0, 0))
-        weather.update()
+                    # Check if the user presses Enter to return to the selection screen
+                    elif event.type == pygame.KEYDOWN:
+                        simulation_on = False
+                        menu_on = True
+                        print("key pressed")
 
-        pygame.display.flip()
-        clock.tick(60)
+                
+                screen.fill((0, 0, 0))
+                weather.update()
+                pygame.display.flip()
+                clock.tick(60)
+                
+                if menu_on:
+                    # Reset the selected weather options
+                    for button in buttons:
+                        button.state = False
+                        button.colors = button.orig_colors
+                        button.text = button.text.split(' [')[0]
+                
+
+                    # Return to the button selection screen
+                    menu_on = True
+
+        else:
+            pygame.display.flip()
+            clock.tick(60)
+    
+
 
 
 if __name__ == '__main__':
