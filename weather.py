@@ -6,7 +6,7 @@ pygame.mixer.init()
 
 class Weather:
     
-    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 10, pixel: bool = False):
+    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 30, pixel: bool = False):
         """
         Initialize the Weather system.
 
@@ -28,7 +28,7 @@ class Weather:
         if weather_types is None:
             pass
         else:
-            self.wind = Wind(self, wind_speed, freq_base=0.02)  # Wind is always part of the system
+            self.wind = Wind(self, wind_speed)  # Wind is always part of the system
 
             if 'rain' in weather_types:
                 self.effects['rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
@@ -50,7 +50,7 @@ class Weather:
                 self.effects['lightning'] = Lightning(self, screen)
 
             if 'fog' in weather_types:
-                self.effects['fog'] = Fog(screen, color=(200, 200, 200), density=0.5, pixel=self.pixel)
+                self.effects['fog'] = Fog(screen, pixel=self.pixel)
 
     def update(self) -> None:
         """
@@ -61,7 +61,7 @@ class Weather:
         # Update wind and apply to other effects
         self.wind.update(self)
 
-        # Update each weather effect
+        # Update each other weather effect
         upd_rects = []
 
         if 'fog' in self.effects:
@@ -76,10 +76,12 @@ class Weather:
         pygame.display.update(upd_rects)  # Update only the rectangles that are changed
         
         #Play sounds
-        new_idx = (pygame.time.get_ticks()//666 + 1) % len(self.sounds)
-        if new_idx > self.index:
-            self.index = new_idx
-            self.sounds[new_idx].play(-1)
+        if len(self.sounds):
+            new_idx = (pygame.time.get_ticks()//666 + 1) % len(self.sounds)
+            if new_idx > self.index:
+                self.index = new_idx
+                self.sounds[1].play(-1) # Plays sound in a loop
+                self.sounds.pop(1) # Removes the sound from the list when it is already playing in loop 
             
 
     def toggle_effect(self, effect_name: str) -> None:
@@ -93,10 +95,12 @@ class Weather:
         """Manually set the wind speed."""
         self.wind.reset(self, base_max_speed, freq_base, self.wind.max_gusts, self.wind.freq_gusts)
 
-    def set_fog_density(self, density: float)-> None:
-        """Set the density of the fog effect."""
+    def set_fog_density(self, density: float, color: list[int, int, int] | None = None )-> None:
+        """Set the density (and color if needed) of the fog effect."""
+       
         if 'fog' in self.effects:
-            self.effects['fog'].density = density
+            if color == None: color = self.effects['fog'].color
+            self.effects['fog'].load_images(density, color, self.pixel) 
 
     def set_lightning_frequency(self, frequency: int)-> None:
         """
@@ -107,7 +111,78 @@ class Weather:
 
         if 'lightning' in self.effects:
             self.effects['lightning'].frequency = frequency
+
+
+class Wind:
+    """
+    Class representing wind, which can affect the movement of precipitation.
+
+    :param weather: Instance of the weather class
+    :param base_max_speed: The maximum base wind speed. Ideally, from -100 to 100; the higher the absolute number, the higher the wind gets.
+    :param amplitude: From 0 to 100, a 0 will mean that base speed is constant and 100 means that the wind oscillates between (negative) -base_max_speed and +base_max_speed
+    :param freq_base: The frequency of the base wind speed variation. Ideally, from 0 to 100; more than 100 works but is too erratic.
+    :param max_gusts: The maximum wind speed during gusts.
+    :param freq_gusts: The frequency of the gusts. Ideally, from 0 to 100.
+    """
+
+    def __init__(self, weather,  base_max_speed: int, amplitude: int = 55, freq_base: int = 50, max_gusts: int = 5, freq_gusts: int = 50):
+        self.reset(weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts)
+    
+    def reset(self, weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts):
+        self.base_max_speed: int = base_max_speed
+        self.freq_base: int = freq_base 
+        self.amplitude: int = amplitude
+        self.max_gusts:int = max_gusts
+        self.gusts = random.uniform(self.max_gusts / 2, self.max_gusts)
+        self.freq_gusts: int = freq_gusts
+
+        self.start_time = pygame.time.get_ticks()
+
+        for i in range(5):
+            sound = pygame.mixer.Sound(f'assets/wind/{i+1}.mp3')
+            weather.wind_sounds.append(sound) 
+
+        self.update(weather)
             
+
+    def update(self, weather) -> None:
+        """
+        Update the wind speed based on the current time and sinusoidal variations.
+        """
+        t = (pygame.time.get_ticks() - self.start_time) / 1000  # Time in seconds
+
+        # Generate a sinusoidal value for regular wind
+        max_speed = self.base_max_speed 
+        dif_speed =  (self.base_max_speed * self.amplitude) // 100 
+        mean_speed = max_speed - dif_speed
+ 
+        base_var = dif_speed*math.sin(2 * math.pi * self.freq_base/1000 * t)
+
+        base_wind = mean_speed+base_var
+
+        # Generate a series of sinusoidal gusts
+        gusts_sum = 0
+        for i in range(10):
+            gusts_var = math.sin(2 * math.pi * (i+1) * self.freq_gusts/500 * t)
+            gusts_sum += self.gusts * gusts_var
+
+        # When gusts value is close to 0, a new base speed is established the gusts
+        if -0.01 < gusts_var < 0.01:
+            self.gusts = random.uniform(self.max_gusts // 2, self.max_gusts)
+
+        # Add the base value and the gust to get the total speed
+        self.speed = base_wind + gusts_sum
+
+        #Play sounds
+        new_idx = (pygame.time.get_ticks()//1000+ 1) % len(weather.wind_sounds)
+
+        if new_idx > weather.w_idx:
+            weather.w_idx = new_idx
+            weather.wind_sounds[new_idx].play(-1)
+        
+        weather.wind_sounds[new_idx].set_volume(0.01*abs(base_wind))  
+
+
 class Precip:
     """
     Base class for precipitation effects such as rain, snow, or hail.
@@ -226,10 +301,8 @@ class Precip:
         def _reset_on_sides(self, left: bool) -> None:
             """Restart the drop on one side of the screen."""
             self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
-            if left:
-                self.pos = [-50, random.random() * self.screen_h]
-            else:
-                self.pos = [self.screen_w, random.random() * self.screen_h]
+            if left:   self.pos = [-self.size[1], random.random() * self.screen_h]
+            else:      self.pos = [self.screen_w, random.random() * self.screen_h]
 
         def render(self, screen: pygame.Surface, wind_speed: float) -> pygame.Rect | None:
             """
@@ -245,9 +318,11 @@ class Precip:
             rotated_pic = self.pic  # Initialize to the default picture
 
             if wind_speed:
-                dx = (wind_speed - self.current_speed_x)*(1-self.weight)**3
+                dx = (wind_speed - self.current_speed_x)*(1 - self.weight)**2
                 
-                self.current_speed_x += dx/500
+                self.current_speed_x += dx/1000
+                if self.current_speed_x > 1: self.current_speed_x -= (self.current_speed_x**0.5) / 100 
+                elif self.current_speed_x < -1: self.current_speed_x += ((abs(self.current_speed_x))**0.5) / 100
                 self.pos[0] += self.current_speed_x
 
                 # Calculate tilt angle (in radians)
@@ -391,74 +466,6 @@ class Hail(Precip):
             return rect
 
 
-class Wind:
-    """
-    Class representing wind, which can affect the movement of precipitation.
-
-    :param weather: Instance of the weather class
-    :param base_max_speed: The maximum base wind speed.
-    :param freq_base: The frequency of the base wind speed variation.
-    :param max_gusts: The maximum wind speed during gusts.
-    :param freq_gusts: The frequency of the gusts.
-    """
-
-    def __init__(self, weather,  base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 3, freq_gusts: float = 0.5):
-        self.reset(weather, base_max_speed, freq_base, max_gusts, freq_gusts)
-    
-    def reset(self, weather, base_max_speed, freq_base, max_gusts, freq_gusts):
-        self.base_max_speed = base_max_speed
-        self.base_speed = random.uniform(base_max_speed // 2, base_max_speed)
-        self.freq_base = freq_base
-
-        self.max_gusts = max_gusts
-        self.gusts = random.uniform(max_gusts // 2, max_gusts)
-        self.freq_gusts = freq_gusts
-
-        self.start_time = pygame.time.get_ticks()
-
-        for i in range(3):
-            sound = pygame.mixer.Sound(f'assets/wind/{i+1}.mp3')
-            weather.wind_sounds.append(sound) 
-
-        self.update(weather)
-            
-
-
-    def update(self, weather) -> None:
-        """
-        Update the wind speed based on the current time and sinusoidal variations.
-        """
-        t = (pygame.time.get_ticks() - self.start_time) / 1000  # Time in seconds
-
-        # Generate a sinusoidal value for regular wind
-        base_var = math.sin(2 * math.pi * self.freq_base * t)
-        base_wind = self.base_speed * (0.2 + 0.8 * base_var)
-
-        # Generate a sinusoidal value with random gusts
-        gusts_var = math.sin(2 * math.pi * self.freq_gusts * t)
-        gusts = self.gusts * gusts_var
-
-        # When base value is close to 0, a new base speed is established
-        if -0.01 < base_var < 0.01:
-            self.base_speed = random.uniform(self.base_max_speed // 2, self.base_max_speed)
-        if -0.01 < gusts_var < 0.01:
-            self.gusts = random.uniform(self.max_gusts // 2, self.max_gusts)
-
-        # Add the base value and the gust to get the total speed
-        self.speed = base_wind + gusts
-
-        #Play sounds
-        new_idx = (pygame.time.get_ticks()//3500+ 1) % len(weather.wind_sounds)
-
-        if new_idx > weather.w_idx:
-            weather.w_idx = new_idx
-            weather.wind_sounds[new_idx].play(-1)
-        
-        weather.wind_sounds[new_idx].set_volume(0.05*self.speed)  #If wind > 20 volume will be max
-
-        print((0.05*self.speed),weather.wind_sounds[new_idx].get_volume())
-
-
 class Lightning:
     """
     Class representing lightning effects.
@@ -524,31 +531,43 @@ class Fog:
     Class representing fog effects.
 
     :param screen: The Pygame screen where the fog will be drawn.
-    :param color: The color of the fog.
+    :param color: The color of the fog in RGB.
     :param density: A value between 0 and 1 representing how dense the fog is.
-    :param pixel: If True, It will load a pixelated image.
+    :param pixel: Bollean. If True, it will load a pixelated image.
+    :param inertia: From 0 to 100. Being 0 means that the fog image almost follows wind speed, and 100 means that the wind barely affects the movement.
     """
 
-    def __init__(self, screen: pygame.Surface, color: tuple[int, int, int] = (200, 200, 200), density: float = 0.5, pixel: bool=False):
+    def __init__(self, screen: pygame.Surface, density: float = 0.5, pixel: bool=False, drag = 0, color: tuple[int, int, int] = (20, 0, 20), inertia: int = 10):
         self.screen = screen
         self.screen_w = screen.get_width()
         self.screen_h = screen.get_height()
         self.color = color
-        self.density = density  # A value between 0 and 1 representing how dense the fog is
-        self.pixel = pixel
+        self.inertia = inertia 
+        self.speed = 0 # Displacement of the image in x direction
+        self.y_ampl = random.random()*(self.screen_h // 4) # Amplitude of the sin function that controls the displacement of the image in y direction
 
+        self.load_images(density, color, pixel)
+
+    def load_images(self, density, color, pixel):
         # Load images
+        if pixel: img = pygame.image.load(f'assets/NoisePix.png').convert_alpha()  # Available at https://danialc0.itch.io/tileable-fog 
+        else:     img = pygame.image.load(f'assets/NoiseReg.png').convert_alpha() 
+        img = pygame.transform.scale(img, (self.screen_w*2 - 1, self.screen_h * 2))
+        img.set_alpha(int(255*density))
+        
+        color_surface = pygame.Surface(img.get_size())
+        color_surface.fill(color)
+        color_surface.set_alpha(255*density)
+        img.blit(color_surface, (0, 0))
+        
         self.img = []
         num_img = 2
-        for _ in range(num_img):
-            if pixel: img = pygame.image.load(f'assets/NoisePix.png').convert_alpha()  # Available at https://danialc0.itch.io/tileable-fog 
-            else:     img = pygame.image.load(f'assets/NoiseReg.png').convert_alpha() 
-            img = pygame.transform.scale(img, (self.screen_w - 1, self.screen_h * 1.2))
-            img.set_alpha(int(255*density))
+
+        for _ in range(num_img):    
             self.img.append(img)
 
         # Position to start moving the fog from
-        self.offset_1 = -self.screen_w
+        self.offset_1 = -self.screen_w*2
         self.offset_2 = 1
 
     def update(self, wind_speed: float) -> None:
@@ -557,19 +576,26 @@ class Fog:
 
         :param wind_speed: The current wind speed affecting the fog.
         """
-        # Move the fog across the screen
-        self.offset_1 += wind_speed
+        dx = (wind_speed - self.speed)
+        self.speed += dx/(10*self.inertia)
 
-        y_movement = (self.screen_h // 15) * math.sin(math.pi * self.offset_1 / self.screen_w)
-        y_pos = -(self.screen_h // 15) + y_movement
+        # Move the fog across the screen in x direction
+        self.offset_1 += self.speed
 
-        if self.offset_1 > self.screen_w:
-            self.offset_1 = -self.screen_w
-        elif self.offset_1 < -self.screen_w:
-            self.offset_1 = self.screen_w
+        # Move the fog across the screen in y direction
+        y_movement = self.y_ampl * math.sin(math.pi * self.offset_1 / self.screen_w)
+        y_pos = -(self.screen_h // 4) + y_movement
 
-        self.offset_2 = self.offset_1 + self.screen_w if self.offset_1 <= 0 else self.offset_1 - self.screen_w
+        if -0.01 < y_pos < 0.01:
+            self.y_ampl = random()*(self.screen_h // 4)
 
+        if self.offset_1 > self.screen_w*2:
+            self.offset_1 = -self.screen_w*2
+        elif self.offset_1 < -self.screen_w*2:
+            self.offset_1 = self.screen_w*2
+
+        self.offset_2 = self.offset_1 + self.screen_w*2 if self.offset_1 <= 0 else self.offset_1 - self.screen_w*2
+        
         # Blit the fog surface onto the screen
         self.screen.blit(self.img[0], (self.offset_1, y_pos))
         self.screen.blit(self.img[1], (self.offset_2, y_pos))
