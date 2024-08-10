@@ -32,7 +32,7 @@ class Weather:
                                                  color=(150, 255, 155, 155), flake=False, num_drops=40)
 
             if 'snow' in weather_types:
-                self.effects['snow'] = Snow(screen, width=25, initial_speed=2, acc=1, color=(255, 255, 255, 255),
+                self.effects['snow'] = Snow(screen, width=25, height=40, initial_speed=2, acc=1, color=(255, 255, 255, 255),
                                             flake=True, num_drops=40, pixel=self.pixel)
 
             if 'hail' in weather_types:
@@ -57,18 +57,14 @@ class Weather:
         # Update each weather effect
         upd_rects = []
 
-        if 'lightning' in self.effects:
-            self.effects['lightning'].update()
-        if 'snow' in self.effects:
-            upd_rects.extend(self.effects['snow'].update(self.wind.speed))
-        if 'rain' in self.effects:
-            upd_rects.extend(self.effects['rain'].update(self.wind.speed))
-        if 'acid rain' in self.effects:
-            upd_rects.extend(self.effects['acid rain'].update(self.wind.speed))
-        if 'hail' in self.effects:
-            upd_rects.extend(self.effects['hail'].update(self.wind.speed))
         if 'fog' in self.effects:
             self.effects['fog'].update(self.wind.speed)
+
+        for effect_name in ['lightning', 'snow', 'rain', 'acid rain', 'hail']:
+            if effect_name in self.effects:
+                updated_rect = self.effects[effect_name].update(self.wind.speed)
+                if updated_rect is not None:
+                    upd_rects.extend(updated_rect)
 
         pygame.display.update(upd_rects)  # Update only the rectangles that are changed
 
@@ -117,7 +113,7 @@ class Precip:
     """
 
     def __init__(self, screen: pygame.Surface, width: int, height: int, initial_speed: int, acc: int,
-                 color: tuple[int, int, int, int], num_drops: int, flake: bool = False, pixel: bool = False):
+                 color: tuple[int, int, int, int], num_drops: int, flake: bool = False, pixel: bool = False, is_hail=False):
         self.screen = screen
         self.width = width
         self.height = height
@@ -125,7 +121,9 @@ class Precip:
         self.pixel = pixel
 
         self.num_drops = num_drops
+        self.create_drops(screen, initial_speed, acc, num_drops, flake, is_hail)
 
+    def create_drops(self, screen, initial_speed, acc, num_drops, flake, is_hail):
         self.drops = []
         for drop in range(num_drops):
             scale = 0.35 + 0.65 * (num_drops - drop) / num_drops
@@ -154,7 +152,9 @@ class Precip:
                 else:
                     pygame.draw.circle(pic, (r, g, b, 255), (w // 2, h - w), w // 4)
 
-            new_drop = Precip.Drop(speed, acceleration, weight, pic, screen)
+            if is_hail: new_drop = Hail.Drop(speed, acceleration, weight, pic, screen)
+            else: new_drop = Precip.Drop(speed, acceleration, weight, pic, screen)
+            
             self.drops.append(new_drop)
 
     def update(self, wind_speed: float = 0) -> list[pygame.Rect]:
@@ -208,9 +208,10 @@ class Precip:
             self.current_speed_x = 0
             self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
 
-        def _reset_on_top(self) -> None:
+        def _reset_on_top(self, wind_speed) -> None:
             """Restart the drop at the top of the screen."""
             self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
+            self.current_speed_x = wind_speed//2
             self.pos = [random.random() * self.screen_w, - self.size[1]]
 
         def _reset_on_sides(self, left: bool) -> None:
@@ -239,9 +240,8 @@ class Precip:
             rotated_pic = self.pic  # Initialize to the default picture
 
             if wind_speed:
-                self.current_speed_x += (wind_speed - self.current_speed_x)*(1-self.weight)
+                self.current_speed_x += (wind_speed - self.current_speed_x)*(1-self.weight)**5
                 self.pos[0] += self.current_speed_x
-                print(self.current_speed_x, wind_speed, self.weight )
 
                 # Calculate tilt angle (in radians)
                 tilt_angle = math.atan2(self.current_speed_x, self.current_speed_y)
@@ -266,7 +266,7 @@ class Precip:
             self.current_speed_y += self.acceleration
 
             if self.pos[1] > self.screen_h:
-                self._reset_on_top()
+                self._reset_on_top(wind_speed)
 
             return rect
 
@@ -329,14 +329,15 @@ class Hail(Precip):
 
     def __init__(self, screen: pygame.Surface, width: int = 10, height: int = 50, initial_speed: float = 20,
                  acc: float = 1, color: tuple[int, int, int, int] = (200, 200, 200, 255), flake: bool = True,
-                 num_drops: int = 10, pixel: bool = False):
+                 num_drops: int = 10, pixel: bool = False, is_hail:bool=True):
         super().__init__(screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
-                         flake=flake, num_drops=num_drops, pixel=pixel)
+                         flake=flake, num_drops=num_drops, pixel=pixel, is_hail=is_hail)
+        
 
     class Drop(Precip.Drop):
         """A single hailstone drop, with the ability to bounce."""
 
-        def __init__(self, speed: float, acc: float, pic: pygame.Surface, screen: pygame.Surface):
+        def __init__(self, speed: float, acc: float, weight:float, pic: pygame.Surface, screen: pygame.Surface):
             """
             Initialize a hailstone drop.
 
@@ -345,7 +346,7 @@ class Hail(Precip):
             :param pic: The Pygame surface representing the hailstone.
             :param screen: The Pygame screen where the hailstone will be drawn.
             """
-            super().__init__(speed, acc, pic, screen)
+            super().__init__(speed, acc, weight, pic, screen)
             self.bounce_count = 0  # Track the number of bounces
 
         def render(self, screen: pygame.Surface, now: float, wind_speed: float) -> pygame.Rect | None:
@@ -358,13 +359,15 @@ class Hail(Precip):
             :return: The rectangle area where the hailstone was drawn.
             """
             rect = super().render(screen, now, wind_speed)
-
-            if self.pos[1] >= (self.screen_h - 100 - self.size[1]):
-                if self.bounce_count < 3:  # Limit the number of bounces
-                    self.current_speed_y = -self.current_speed_y * 0.6  # Lose some speed on bounce
+            
+            if self.pos[1] >= (self.screen_h - 20*(1-self.weight)):
+                if self.bounce_count < 5:  # Limit the number of bounces
+                    self.current_speed_y = -self.current_speed_y * 0.1 # Lose speed on bounce
+                    self.current_speed_x += random.randint(-5,5)
                     self.bounce_count += 1
                 else:
-                    self._reset_on_top()
+                    self._reset_on_top(wind_speed)
+                    self.current_speed_x += random.randint(-5,5)
                     self.bounce_count = 0
 
             return rect
@@ -440,7 +443,7 @@ class Lightning:
         self.flash_step = 0
         self.flash_duration = []
 
-    def update(self) -> None:
+    def update(self, wind_sp) -> None:
         """
         Update the lightning effect, checking if a flash should start or continue.
         """
@@ -544,7 +547,7 @@ def main():
     clock = pygame.time.Clock()
 
     # Weather options: ['rain', 'snow', 'hail', 'lightning', 'fog']
-    weather = Weather(screen, weather_types=['acid rain', 'snow', 'hail', 'lightning', 'fog'], pixel=True)
+    weather = Weather(screen, weather_types=['rain', 'snow', 'hail', 'lightning', 'fog'], pixel=False)
 
     while True:
         for event in pygame.event.get():
@@ -555,13 +558,11 @@ def main():
         start_time = time.time()
         screen.fill((0, 0, 0))
         weather.update()
-        print(f'{weather.wind.speed =}')
-
         
         # Other game logic here
         
         end_time = time.time()
-        print(f'Time for each frame: {end_time - start_time:.6f} seconds')
+        # print(f'Time for each frame: {end_time - start_time:.6f} seconds')
         
         pygame.display.flip()
         clock.tick(60)
