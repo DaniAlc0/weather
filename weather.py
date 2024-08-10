@@ -1,9 +1,11 @@
 import pygame
 import random
 import math
+pygame.mixer.init()
 
 
 class Weather:
+    
     def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 10, pixel: bool = False):
         """
         Initialize the Weather system.
@@ -17,30 +19,35 @@ class Weather:
         self.screen = screen
         self.pixel = pixel
         self.effects = {}
+        
+        self.sounds = []
+        self.index = 0
+        self.wind_sounds = []
+        self.w_idx = 0
 
         if weather_types is None:
             pass
         else:
-            self.wind = Wind(wind_speed, freq_base=0.02)  # Wind is always part of the system
+            self.wind = Wind(self, wind_speed, freq_base=0.02)  # Wind is always part of the system
 
             if 'rain' in weather_types:
-                self.effects['rain'] = Rain(screen, width=10, height=150, initial_speed=15, acc=50,
+                self.effects['rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
                                             color=(150, 200, 255, 155), flake=False, num_drops=40)
 
             if 'acid rain' in weather_types:
-                self.effects['acid rain'] = Rain(screen, width=10, height=150, initial_speed=15, acc=50,
+                self.effects['acid rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
                                                  color=(150, 255, 155, 155), flake=False, num_drops=40)
 
             if 'snow' in weather_types:
-                self.effects['snow'] = Snow(screen, width=25, height=40, initial_speed=2, acc=1, color=(255, 255, 255, 255),
+                self.effects['snow'] = Snow(self, screen, width=25, height=40, initial_speed=2, acc=1, color=(255, 255, 255, 255),
                                             flake=True, num_drops=40, pixel=self.pixel)
 
             if 'hail' in weather_types:
-                self.effects['hail'] = Hail(screen, width=25, height=50, initial_speed=30, acc=20,
+                self.effects['hail'] = Hail(self, screen, width=25, height=50, initial_speed=30, acc=20,
                                             color=(220, 220, 220, 220), flake=True, num_drops=40, pixel=self.pixel)
 
             if 'lightning' in weather_types:
-                self.effects['lightning'] = Lightning(screen)
+                self.effects['lightning'] = Lightning(self, screen)
 
             if 'fog' in weather_types:
                 self.effects['fog'] = Fog(screen, color=(200, 200, 200), density=0.5, pixel=self.pixel)
@@ -52,7 +59,7 @@ class Weather:
         self.screen.fill((0, 0, 0))  # Clear the screen before drawing weather effects
 
         # Update wind and apply to other effects
-        self.wind.update()
+        self.wind.update(self)
 
         # Update each weather effect
         upd_rects = []
@@ -67,6 +74,13 @@ class Weather:
                     upd_rects.extend(updated_rect)
 
         pygame.display.update(upd_rects)  # Update only the rectangles that are changed
+        
+        #Play sounds
+        new_idx = (pygame.time.get_ticks()//666 + 1) % len(self.sounds)
+        if new_idx > self.index:
+            self.index = new_idx
+            self.sounds[new_idx].play(-1)
+            
 
     def toggle_effect(self, effect_name: str) -> None:
         """Toggle the visibility of a specific weather effect."""
@@ -77,7 +91,7 @@ class Weather:
 
     def set_wind_speed(self, base_max_speed, freq_base)-> None:
         """Manually set the wind speed."""
-        self.wind.reset(base_max_speed, freq_base, self.wind.max_gusts, self.wind.freq_gusts)
+        self.wind.reset(self, base_max_speed, freq_base, self.wind.max_gusts, self.wind.freq_gusts)
 
     def set_fog_density(self, density: float)-> None:
         """Set the density of the fog effect."""
@@ -101,6 +115,7 @@ class Precip:
     The value of height, width, and initial_speed of the drops follow a linear sequence,
     ranging from 25% of each max value for the first drop to 100% for the last drop.
 
+    :param weather: Instance of the weather class
     :param screen: The Pygame screen where the weather effects will be drawn.
     :param width: Max width of all drops.
     :param height: Max height of each drop.
@@ -112,7 +127,7 @@ class Precip:
     :param pixel: If True, the flake will be drawn as a square instead of a circle.
     """
 
-    def __init__(self, screen: pygame.Surface, width: int, height: int, initial_speed: int, acc: int,
+    def __init__(self, weather, screen: pygame.Surface, width: int, height: int, initial_speed: int, acc: int,
                  color: tuple[int, int, int, int], num_drops: int, flake: bool = False, pixel: bool = False, is_hail=False):
         self.screen = screen
         self.width = width
@@ -205,7 +220,7 @@ class Precip:
         def _reset_on_top(self, wind_speed) -> None:
             """Restart the drop at the top of the screen."""
             self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
-            self.current_speed_x = wind_speed//2
+            self.current_speed_x = self.current_speed_x//2 + wind_speed//4
             self.pos = [random.random() * self.screen_w, - self.size[1]]
 
         def _reset_on_sides(self, left: bool) -> None:
@@ -218,7 +233,7 @@ class Precip:
 
         def render(self, screen: pygame.Surface, wind_speed: float) -> pygame.Rect | None:
             """
-            Draw the drop on the screen.
+            Updates the position/speed of the drop and then draws it on the screen.
 
             :param screen: The Pygame screen where the drop will be drawn.
             :param wind_speed: The current wind speed affecting the drop current_speed_x.
@@ -230,7 +245,9 @@ class Precip:
             rotated_pic = self.pic  # Initialize to the default picture
 
             if wind_speed:
-                self.current_speed_x += (wind_speed - self.current_speed_x)*(1-self.weight)**5
+                dx = (wind_speed - self.current_speed_x)*(1-self.weight)**3
+                
+                self.current_speed_x += dx/500
                 self.pos[0] += self.current_speed_x
 
                 # Calculate tilt angle (in radians)
@@ -261,8 +278,18 @@ class Precip:
             return rect
 
 class Rain(Precip):
-    def __init__(self, screen, height=150, width=10, initial_speed=15, acc=5, color=(150, 200, 255, 200), flake=False, num_drops=25):
-        super().__init__(screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color, flake=flake, num_drops=num_drops)
+    def __init__(self, weather, screen, height=150, width=10, initial_speed=15, acc=5, color=(150, 200, 255, 200), flake=False, num_drops=25):
+        super().__init__(weather, screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color, flake=flake, num_drops=num_drops)
+
+        for i in range(5):
+            sound = pygame.mixer.Sound(f'assets/rain/{i+6}.mp3')
+            weather.sounds.append(sound) 
+
+            
+
+            
+        
+
 
 class Snow(Precip):
     """
@@ -270,6 +297,7 @@ class Snow(Precip):
 
     Snowflakes can be drawn as circles or squares, depending on the 'pixel' parameter.
 
+    :param weather: Instance of the weather class
     :param screen: The Pygame screen where the snow will be drawn.
     :param height: Max height of the snowflakes.
     :param width: Max width of the snowflakes.
@@ -281,10 +309,10 @@ class Snow(Precip):
     :param pixel: If True, snowflakes will be drawn as squares instead of circles.
     """
 
-    def __init__(self, screen: pygame.Surface, height: int = 50, width: int = 25, initial_speed: float = 2,
+    def __init__(self, weather, screen: pygame.Surface, height: int = 50, width: int = 25, initial_speed: float = 2,
                  acc: float = 0.1, color: tuple[int, int, int, int] = (255, 255, 255, 255), flake: bool = True,
                  num_drops: int = 35, pixel: bool = False):
-        super().__init__(screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
+        super().__init__(weather=weather, screen=screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
                          flake=flake, num_drops=num_drops, pixel=pixel)
 
     def render(self, screen: pygame.Surface, now: float, wind_speed: float) -> pygame.Rect | None:
@@ -306,6 +334,7 @@ class Hail(Precip):
 
     Hail can bounce when it reaches the bottom of the screen, and can be drawn as circles or squares.
 
+    :param weather: Instance of the weather class
     :param screen: The Pygame screen where the hail will be drawn.
     :param width: Max width of the hailstones.
     :param height: Max height of the hailstones.
@@ -317,10 +346,10 @@ class Hail(Precip):
     :param pixel: If True, hailstones will be drawn as squares instead of circles.
     """
 
-    def __init__(self, screen: pygame.Surface, width: int = 10, height: int = 50, initial_speed: float = 20,
+    def __init__(self, weather, screen: pygame.Surface, width: int = 10, height: int = 50, initial_speed: float = 20,
                  acc: float = 1, color: tuple[int, int, int, int] = (200, 200, 200, 255), flake: bool = True,
                  num_drops: int = 10, pixel: bool = False, is_hail:bool=True):
-        super().__init__(screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
+        super().__init__(weather=weather, screen=screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
                          flake=flake, num_drops=num_drops, pixel=pixel, is_hail=is_hail)
         
 
@@ -366,16 +395,17 @@ class Wind:
     """
     Class representing wind, which can affect the movement of precipitation.
 
+    :param weather: Instance of the weather class
     :param base_max_speed: The maximum base wind speed.
     :param freq_base: The frequency of the base wind speed variation.
     :param max_gusts: The maximum wind speed during gusts.
     :param freq_gusts: The frequency of the gusts.
     """
 
-    def __init__(self, base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 3, freq_gusts: float = 0.5):
-        self.reset(base_max_speed, freq_base, max_gusts, freq_gusts)
+    def __init__(self, weather,  base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 3, freq_gusts: float = 0.5):
+        self.reset(weather, base_max_speed, freq_base, max_gusts, freq_gusts)
     
-    def reset(self, base_max_speed, freq_base, max_gusts, freq_gusts):
+    def reset(self, weather, base_max_speed, freq_base, max_gusts, freq_gusts):
         self.base_max_speed = base_max_speed
         self.base_speed = random.uniform(base_max_speed // 2, base_max_speed)
         self.freq_base = freq_base
@@ -385,9 +415,16 @@ class Wind:
         self.freq_gusts = freq_gusts
 
         self.start_time = pygame.time.get_ticks()
-        self.update()
 
-    def update(self) -> None:
+        for i in range(3):
+            sound = pygame.mixer.Sound(f'assets/wind/{i+1}.mp3')
+            weather.wind_sounds.append(sound) 
+
+        self.update(weather)
+            
+
+
+    def update(self, weather) -> None:
         """
         Update the wind speed based on the current time and sinusoidal variations.
         """
@@ -410,17 +447,29 @@ class Wind:
         # Add the base value and the gust to get the total speed
         self.speed = base_wind + gusts
 
+        #Play sounds
+        new_idx = (pygame.time.get_ticks()//3500+ 1) % len(weather.wind_sounds)
+
+        if new_idx > weather.w_idx:
+            weather.w_idx = new_idx
+            weather.wind_sounds[new_idx].play(-1)
+        
+        weather.wind_sounds[new_idx].set_volume(0.05*self.speed)  #If wind > 20 volume will be max
+
+        print((0.05*self.speed),weather.wind_sounds[new_idx].get_volume())
+
 
 class Lightning:
     """
     Class representing lightning effects.
 
+    :param weather: Instance of the weather class
     :param screen: The Pygame screen where the lightning will be drawn.
     :param frequency: The frequency of lightning strikes, in milliseconds.
     :param flashes_per_thunder: The number of flashes in a single lightning event.
     """
 
-    def __init__(self, screen: pygame.Surface, frequency: int = 5000, flashes_per_thunder: int = 3):
+    def __init__(self, weather, screen: pygame.Surface, frequency: int = 5000, flashes_per_thunder: int = 3):
         self.screen = screen
         self.frequency = frequency
         self.time_for_lightning = random.randint(self.frequency - self.frequency // 5, self.frequency + self.frequency // 5)
@@ -535,7 +584,7 @@ def main():
     screen = pygame.display.set_mode(SCREENSIZE)
     clock = pygame.time.Clock()
 
-    # Weather options: ['rain', 'snow', 'hail', 'lightning', 'fog']
+    # Weather options: ['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog']
     weather = Weather(screen, weather_types=['rain', 'snow', 'hail', 'lightning', 'fog'], pixel=False)
 
     while True:
@@ -551,7 +600,7 @@ def main():
         # Other game logic here
         
         end_time = time.time()
-        print(f'Time for each frame: {end_time - start_time:.6f} seconds')
+        # print(f'Time for each frame: {end_time - start_time:.6f} seconds')
         
         pygame.display.flip()
         clock.tick(60)
