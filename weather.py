@@ -1,3 +1,12 @@
+# Author: Dani Alc
+# Mail: danialcdev@gmail.com 
+# Date: Aug 2024
+# Description: Weather simulator using pygame
+# This code can be used in any non-commerical project, and you may modify it as you want. 
+# If you make any enhancements, please share them!  
+# Also contact me for commercial applications
+
+
 import pygame
 import random
 import math
