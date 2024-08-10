@@ -162,28 +162,22 @@ class Precip:
         Update and render all precipitation drops.
 
         :param wind_speed: The current speed of the wind affecting the precipitation.
-        :return: A list of dirty rectangles that were updated.
+        :return: A list of rectangles to be updated.
         """
-        now = pygame.time.get_ticks() / 1000.0
-        dirtyrects = []
-
+        
+        update_rects = []
         for drop in self.drops:
-            r = drop.render(self.screen, now, wind_speed)
+            r = drop.render(self.screen, wind_speed)
             if r:
-                i = r.collidelist(dirtyrects)
+                i = r.collidelist(update_rects)
                 if i > -1:
-                    dirtyrects[i].union_ip(r)
+                    update_rects[i].union_ip(r)
                 else:
-                    dirtyrects.append(r)
-
-        return dirtyrects
+                    update_rects.append(r)
+        return update_rects
 
     class Drop:
         """A single drop used by the precipitation generator."""
-
-        nexttime = 0  # The next time the drop will draw
-        interval = 0.01  # How frequently the drop should draw
-
         def __init__(self, speed: float, acc: float, weight: float, pic: pygame.Surface, screen: pygame.Surface):
             """
             Initialize a precipitation drop.
@@ -222,19 +216,15 @@ class Precip:
             else:
                 self.pos = [self.screen_w, random.random() * self.screen_h]
 
-        def render(self, screen: pygame.Surface, now: float, wind_speed: float) -> pygame.Rect | None:
+        def render(self, screen: pygame.Surface, wind_speed: float) -> pygame.Rect | None:
             """
             Draw the drop on the screen.
 
             :param screen: The Pygame screen where the drop will be drawn.
-            :param now: The current time in seconds.
             :param wind_speed: The current wind speed affecting the drop current_speed_x.
             :return: The rectangle area where the drop was drawn.
             """
-            if now < self.nexttime:
-                return None
 
-            self.nexttime = now + self.interval
             oldrect = self.pic.get_rect()
 
             rotated_pic = self.pic  # Initialize to the default picture
@@ -349,16 +339,15 @@ class Hail(Precip):
             super().__init__(speed, acc, weight, pic, screen)
             self.bounce_count = 0  # Track the number of bounces
 
-        def render(self, screen: pygame.Surface, now: float, wind_speed: float) -> pygame.Rect | None:
+        def render(self, screen: pygame.Surface, wind_speed: float) -> pygame.Rect | None:
             """
             Render the hailstone, allowing it to bounce when it hits the bottom of the screen.
 
             :param screen: The Pygame screen where the hailstone will be drawn.
-            :param now: The current time in seconds.
             :param wind_speed: The current wind speed affecting the hailstone.
             :return: The rectangle area where the hailstone was drawn.
             """
-            rect = super().render(screen, now, wind_speed)
+            rect = super().render(screen, wind_speed)
             
             if self.pos[1] >= (self.screen_h - 20*(1-self.weight)):
                 if self.bounce_count < 5:  # Limit the number of bounces
@@ -383,7 +372,7 @@ class Wind:
     :param freq_gusts: The frequency of the gusts.
     """
 
-    def __init__(self, base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 1, freq_gusts: float = 0.5):
+    def __init__(self, base_max_speed: float, freq_base: float = 0.05, max_gusts: float = 3, freq_gusts: float = 0.5):
         self.reset(base_max_speed, freq_base, max_gusts, freq_gusts)
     
     def reset(self, base_max_speed, freq_base, max_gusts, freq_gusts):
@@ -562,7 +551,7 @@ def main():
         # Other game logic here
         
         end_time = time.time()
-        # print(f'Time for each frame: {end_time - start_time:.6f} seconds')
+        print(f'Time for each frame: {end_time - start_time:.6f} seconds')
         
         pygame.display.flip()
         clock.tick(60)
