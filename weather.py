@@ -11,7 +11,7 @@ import pygame
 import random
 import math
 pygame.mixer.init(frequency = 44100, size = -16, buffer = 2**12) 
-pygame.mixer.set_num_channels(16)
+pygame.mixer.set_num_channels(24)
 
 
 class Weather:
@@ -631,15 +631,15 @@ class Fog:
 def main():
     import time
     SCREENSIZE = 1200, 800
-    PIXEL = False
+    PIXEL = True
 
     pygame.init()
     screen = pygame.display.set_mode(SCREENSIZE)
     clock = pygame.time.Clock()
 
     # Weather options: ['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog']
-    weather = Weather(screen, weather_types=['rain',  'snow', 'lightning', 'fog'], pixel=PIXEL)
-    bgrd = pygame.image.load(f'assets/forest_pixel.png').convert_alpha() if PIXEL else pygame.image.load(f'assets/img.webp').convert_alpha() 
+    weather = Weather(screen, weather_types=['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog'], pixel=PIXEL)
+    bgrd = pygame.image.load(f'assets/imgpix.webp').convert_alpha() if PIXEL else pygame.image.load(f'assets/img.webp').convert_alpha() 
     bgrd = pygame.transform.scale(bgrd, (SCREENSIZE[0], SCREENSIZE[1]))
 
 

@@ -78,10 +78,10 @@ def main():
     pixel = False
 
     # Create buttons
-    buttons = []
+    weather_buttons = []
     y_offset = 50
     for option in weather_options:
-        buttons.append(Button(option, (50, y_offset), (200, 50)))
+        weather_buttons.append(Button(option, (50, y_offset), (200, 50)))
         y_offset += 60
 
     wind_buttons = []
@@ -91,30 +91,30 @@ def main():
         y_offset += 60
     wind_buttons[0].toggle()
 
-
-    pixel_button = Button("Pixel Mode", (550, 50), (200, 50))
+    pixel_button     = Button("Pixel Mode", (550, 50), (200, 50))
     side_wind_button = Button("Right side wind", (550, 150), (200, 50))
-
-    start_button = Button("Start Simulation", (550, 450), (200, 50), colors=((0, 100, 0), (0, 150, 0)))
+    start_button     = Button("Start Simulation", (550, 450), (200, 50), colors=((0, 100, 0), (0, 150, 0)))
+    
+    all_buttons = weather_buttons + wind_buttons
+    all_buttons.extend([pixel_button, side_wind_button, start_button])
 
     # State booleans
     simulation_on = False
     running = True
 
+    # Load images
+    bgrnd_px   = pygame.image.load(f'assets/imgpix.webp').convert_alpha() 
+    bgrnd_norm = pygame.image.load(f'assets/img.webp').convert_alpha() 
+    bgrnd_px   = pygame.transform.scale(bgrnd_px, (SCREENSIZE[0], SCREENSIZE[1]))
+    bgrnd_norm = pygame.transform.scale(bgrnd_norm, (SCREENSIZE[0], SCREENSIZE[1]))
+
     # Run the GUI loop
     while running:
         screen.fill((30, 30, 30))
 
-        # Draw buttons (always drawn)
-        for button in buttons:
+        # Draw buttons 
+        for button in all_buttons:
             button.draw(screen)
-
-        for button in wind_buttons:
-            button.draw(screen)
-
-        pixel_button.draw(screen)
-        side_wind_button.draw(screen)
-        start_button.draw(screen)
 
         mouse_pos = pygame.mouse.get_pos()
 
@@ -126,19 +126,13 @@ def main():
 
             elif event.type == pygame.MOUSEMOTION:
                 # Check hover only on MOUSEMOTION
-                for button in buttons:
+                for button in all_buttons:
                     button.check_hover(mouse_pos)
 
-                for button in wind_buttons:
-                    button.check_hover(mouse_pos)
-
-                side_wind_button.check_hover(mouse_pos)
-                pixel_button.check_hover(mouse_pos)
-                start_button.check_hover(mouse_pos)
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Check clicks only on MOUSEBUTTONDOWN
-                for button in buttons:
+                for button in weather_buttons:
                     if button.is_clicked(mouse_pos):
                         button.toggle()
 
@@ -160,14 +154,14 @@ def main():
                     pixel = pixel_button.state
 
                 if start_button.is_clicked(mouse_pos):
-                    selected_weather = [button.text.split(' [')[0] for button in buttons if button.state]
+                    selected_weather = [button.text.split(' [')[0] for button in weather_buttons if button.state]
                     menu_on = False
                     simulation_on = True
                  
         # Start the weather simulation if the user presses the Enter key
         keys = pygame.key.get_pressed()
         if keys[pygame.K_RETURN]:
-            selected_weather = [button.text.split(' [')[0] for button in buttons if button.state]
+            selected_weather = [button.text.split(' [')[0] for button in weather_buttons if button.state]
             simulation_on = True
 
 
@@ -176,7 +170,6 @@ def main():
             
             print("simulating")
             while simulation_on:
-                
 
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
@@ -188,20 +181,19 @@ def main():
                         simulation_on = False
                         menu_on = True
                         print("key pressed")
-
                 
-                screen.fill((0, 0, 0))
+                screen.blit(bgrnd_px, (0,0)) if pixel else screen.blit(bgrnd_norm, (0,0)) 
+                
                 weather.update()
                 pygame.display.flip()
                 clock.tick(60)
                 
                 if menu_on:
                     # Reset the selected weather options
-                    for button in buttons:
+                    for button in weather_buttons:
                         button.state = False
                         button.colors = button.orig_colors
                         button.text = button.text.split(' [')[0]
-                
 
                     # Return to the button selection screen
                     menu_on = True
@@ -209,9 +201,6 @@ def main():
         else:
             pygame.display.flip()
             clock.tick(60)
-    
-
-
 
 if __name__ == '__main__':
     main()
