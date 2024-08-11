@@ -1,7 +1,5 @@
 # Distribution / packaging
 .Python
-.png
-assets/
 build/
 develop-eggs/
 dist/
