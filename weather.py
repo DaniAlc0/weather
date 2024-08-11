@@ -10,7 +10,8 @@
 import pygame
 import random
 import math
-pygame.mixer.init()
+pygame.mixer.init(frequency = 44100, size = -16, buffer = 2**12) 
+pygame.mixer.set_num_channels(16)
 
 
 class Weather:
@@ -21,7 +22,7 @@ class Weather:
 
         :param screen: The Pygame screen where the weather effects will be drawn.
         :param weather_types: List of weather effects to initialize.
-                              Supported types: 'rain', 'snow', 'hail', 'lightning', 'fog'.
+                              Supported types: 'rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog'.
         :param wind_speed: Maximum wind speed. Positive is right direction and negative is left.
         :param pixel: If True, snow and hail will be drawn as squares instead of circles.
         """
@@ -30,9 +31,9 @@ class Weather:
         self.effects = {}
         
         self.sounds = []
-        self.index = 0
+        self.timer = 0  # Used to store time for the delay playing different sounds
         self.wind_sounds = []
-        self.w_idx = 0
+        self.w_timer = 0 # Used to store time for the delay playing different wind sounds
 
         if weather_types is None:
             pass
@@ -41,11 +42,11 @@ class Weather:
 
             if 'rain' in weather_types:
                 self.effects['rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
-                                            color=(150, 200, 255, 155), flake=False, num_drops=40)
+                                            color=(150, 200, 255, 155), flake=False, num_drops=80)
 
             if 'acid rain' in weather_types:
                 self.effects['acid rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
-                                                 color=(150, 255, 155, 155), flake=False, num_drops=40)
+                                                 color=(150, 255, 155, 155), flake=False, num_drops=80)
 
             if 'snow' in weather_types:
                 self.effects['snow'] = Snow(self, screen, width=25, height=40, initial_speed=2, acc=1, color=(255, 255, 255, 255),
@@ -65,18 +66,13 @@ class Weather:
         """
         Update and render all active weather effects.
         """
-        self.screen.fill((0, 0, 0))  # Clear the screen before drawing weather effects
-
         # Update wind and apply to other effects
         self.wind.update(self)
 
         # Update each other weather effect
         upd_rects = []
 
-        if 'fog' in self.effects:
-            self.effects['fog'].update(self.wind.speed)
-
-        for effect_name in ['lightning', 'snow', 'rain', 'acid rain', 'hail']:
+        for effect_name in ['lightning', 'fog', 'snow', 'rain', 'acid rain', 'hail']:
             if effect_name in self.effects:
                 updated_rect = self.effects[effect_name].update(self.wind.speed)
                 if updated_rect is not None:
@@ -86,11 +82,12 @@ class Weather:
         
         #Play sounds
         if len(self.sounds):
-            new_idx = (pygame.time.get_ticks()//666 + 1) % len(self.sounds)
-            if new_idx > self.index:
-                self.index = new_idx
-                self.sounds[1].play(-1) # Plays sound in a loop
-                self.sounds.pop(1) # Removes the sound from the list when it is already playing in loop 
+            new_timer = (pygame.time.get_ticks()//1320 + 1) % 20            
+            if new_timer > self.timer:
+                self.timer = new_timer
+                pygame.mixer.find_channel().play(self.sounds[0], -1) # Plays sound in a loop
+                self.sounds.pop(0) # Removes the sound from the list when it is already playing in loop 
+                print(f'playing sound. {len(self.sounds)} left to play')
             
 
     def toggle_effect(self, effect_name: str) -> None:
@@ -183,13 +180,13 @@ class Wind:
         self.speed = base_wind + gusts_sum
 
         #Play sounds
-        new_idx = (pygame.time.get_ticks()//1000+ 1) % len(weather.wind_sounds)
+        new_timer = (pygame.time.get_ticks()//1000+ 1) % len(weather.wind_sounds)
 
-        if new_idx > weather.w_idx:
-            weather.w_idx = new_idx
-            weather.wind_sounds[new_idx].play(-1)
+        if new_timer > weather.w_timer:
+            weather.w_timer = new_timer
+            weather.wind_sounds[new_timer].play(-1)
         
-        weather.wind_sounds[new_idx].set_volume(0.01*abs(base_wind))  
+        weather.wind_sounds[new_timer].set_volume(0.01*abs(base_wind))  
 
 
 class Precip:
@@ -365,15 +362,11 @@ class Rain(Precip):
     def __init__(self, weather, screen, height=150, width=10, initial_speed=15, acc=5, color=(150, 200, 255, 200), flake=False, num_drops=25):
         super().__init__(weather, screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color, flake=flake, num_drops=num_drops)
 
-        for i in range(5):
-            sound = pygame.mixer.Sound(f'assets/rain/{i+6}.mp3')
+        for i in range(6):
+            sound = pygame.mixer.Sound(f'assets/rain/{i+1}.mp3')
             weather.sounds.append(sound) 
 
             
-
-            
-        
-
 
 class Snow(Precip):
     """
@@ -435,7 +428,9 @@ class Hail(Precip):
                  num_drops: int = 10, pixel: bool = False, is_hail:bool=True):
         super().__init__(weather=weather, screen=screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
                          flake=flake, num_drops=num_drops, pixel=pixel, is_hail=is_hail)
-        
+        for i in range(3):
+            sound = pygame.mixer.Sound(f'assets/hail/{i+1}.mp3')
+            weather.sounds.append(sound)         
 
     class Drop(Precip.Drop):
         """A single hailstone drop, with the ability to bounce."""
@@ -482,20 +477,25 @@ class Lightning:
     :param weather: Instance of the weather class
     :param screen: The Pygame screen where the lightning will be drawn.
     :param frequency: The frequency of lightning strikes, in milliseconds.
-    :param flashes_per_thunder: The number of flashes in a single lightning event.
     """
 
-    def __init__(self, weather, screen: pygame.Surface, frequency: int = 5000, flashes_per_thunder: int = 3):
+    def __init__(self, weather, screen: pygame.Surface, frequency: int = 3_000):
         self.screen = screen
         self.frequency = frequency
-        self.time_for_lightning = random.randint(self.frequency - self.frequency // 5, self.frequency + self.frequency // 5)
-        self.flashes_per_thunder = flashes_per_thunder
+        self.time_for_lightning = random.randint(self.frequency - self.frequency // 3, self.frequency + self.frequency // 3)
 
         self.surface = pygame.Surface(self.screen.get_size())
+        self.surface.fill((255, 255, 255))
+        
         self.last_flash_time = pygame.time.get_ticks()
         self.flash_active = False
         self.flash_step = 0
-        self.flash_duration = []
+        self.step_duration = []
+        
+        self.sounds = []
+        for i in range(5):
+            sound = pygame.mixer.Sound(f'assets/thunders/{i+1}.mp3')
+            self.sounds.append(sound) 
 
     def update(self, wind_sp) -> None:
         """
@@ -508,30 +508,47 @@ class Lightning:
             self._continue_flash(current_time)
         elif time_since_last_flash > self.time_for_lightning:  # Checks if a flash should start
             self._start_flash()
+        
+        # print(self.step_duration, self.flash_step)
 
     def _start_flash(self) -> None:
         """Start a lightning flash event."""
-        self.time_for_lightning = random.randint(self.frequency - self.frequency // 5, self.frequency + self.frequency // 5)
+        self.time_for_lightning = random.randint(self.frequency - self.frequency // 3, self.frequency + self.frequency // 3)
         self.flash_active = True
         self.flash_step = 0
-        self.flash_duration = [random.randint(100, 200) for _ in range(self.flashes_per_thunder * 2)]  # Create random durations for the flashes
+        number_of_flashes = random.randint(1,3) #The number of flashes in this event.
+        self.step_duration = [random.randint(200, 300) for _ in range(number_of_flashes * 2)]  # Create random durations for the flashes
+        if number_of_flashes == 1: extra_duration_for_sounds = [random.randint(500, 1500)-sum(self.step_duration), 1, 1, 1, 1, 1] 
+        else:                      extra_duration_for_sounds = [random.randint(500, 1500)-sum(self.step_duration), 1, 500, 1, 500, 1] 
+        self.step_duration.extend(extra_duration_for_sounds) # Adds extra time at the end for playing the sounds
+        self.flash_step_total = len(self.step_duration)
 
     def _continue_flash(self, current_time: int) -> None:
         """Continue a lightning flash event."""
-        if self.flash_step < (self.flashes_per_thunder * 2):
+        if self.flash_step < self.flash_step_total: 
             elapsed_time = current_time - self.last_flash_time
-            if self.flash_step % 2 == 0:
-                self.surface.set_alpha(200)
-                self.surface.fill((255, 255, 255))
-            else:
-                self.surface.set_alpha(30)
 
-            self.screen.blit(self.surface, (0, 0))
-
-            if elapsed_time >= self.flash_duration[self.flash_step]:
+            #First blit the surface. It creates a flashing effect by changing the transparency (alpha) of the surface  
+            if self.flash_step < self.flash_step_total-6: 
+                if self.flash_step % 2 == 0:
+                    alpha = 70*(elapsed_time/self.step_duration[self.flash_step])
+                    self.surface.set_alpha(alpha)
+                else:
+                    alpha = 70*(self.step_duration[self.flash_step]/elapsed_time)
+                    self.surface.set_alpha(alpha)
+                self.screen.blit(self.surface, (0, 0))
+            
+            else: #on the last 6 steps of self.flash_step_total  
+                if self.flash_step % 2 == 1:
+                    pygame.mixer.find_channel().play(self.sounds[random.randint(0,len(self.sounds)-1)]) 
+            
+            #If the time on this step is over, it will jump to the next one 
+            if elapsed_time >= self.step_duration[self.flash_step]:
                 self.flash_step += 1
                 self.last_flash_time = current_time
-        else:
+
+        # On the last step flash_active is swithed off
+        elif self.flash_step >= self.flash_step_total: 
             self.flash_active = False
 
 
@@ -546,7 +563,7 @@ class Fog:
     :param inertia: From 0 to 100. Being 0 means that the fog image almost follows wind speed, and 100 means that the wind barely affects the movement.
     """
 
-    def __init__(self, screen: pygame.Surface, density: float = 0.5, pixel: bool=False, drag = 0, color: tuple[int, int, int] = (20, 0, 20), inertia: int = 10):
+    def __init__(self, screen: pygame.Surface, density: float = 0.7, pixel: bool=False, drag = 0, color: tuple[int, int, int] = (20, 0, 20), inertia: int = 10):
         self.screen = screen
         self.screen_w = screen.get_width()
         self.screen_h = screen.get_height()
@@ -561,12 +578,12 @@ class Fog:
         # Load images
         if pixel: img = pygame.image.load(f'assets/NoisePix.png').convert_alpha()  # Available at https://danialc0.itch.io/tileable-fog 
         else:     img = pygame.image.load(f'assets/NoiseReg.png').convert_alpha() 
-        img = pygame.transform.scale(img, (self.screen_w*2 - 1, self.screen_h * 2))
+        img = pygame.transform.scale(img, (self.screen_w*1.5 - 1, self.screen_h * 2))
         img.set_alpha(int(255*density))
         
         color_surface = pygame.Surface(img.get_size())
         color_surface.fill(color)
-        color_surface.set_alpha(255*density)
+        color_surface.set_alpha(100*density)
         img.blit(color_surface, (0, 0))
         
         self.img = []
@@ -576,7 +593,7 @@ class Fog:
             self.img.append(img)
 
         # Position to start moving the fog from
-        self.offset_1 = -self.screen_w*2
+        self.offset_1 = -self.screen_w*1.5
         self.offset_2 = 1
 
     def update(self, wind_speed: float) -> None:
@@ -590,20 +607,20 @@ class Fog:
 
         # Move the fog across the screen in x direction
         self.offset_1 += self.speed
-
+       
         # Move the fog across the screen in y direction
-        y_movement = self.y_ampl * math.sin(math.pi * self.offset_1 / self.screen_w)
+        y_movement = self.y_ampl * math.sin(pygame.time.get_ticks()/10_000)
         y_pos = -(self.screen_h // 4) + y_movement
 
         if -0.01 < y_pos < 0.01:
             self.y_ampl = random()*(self.screen_h // 4)
 
-        if self.offset_1 > self.screen_w*2:
-            self.offset_1 = -self.screen_w*2
-        elif self.offset_1 < -self.screen_w*2:
-            self.offset_1 = self.screen_w*2
+        if self.offset_1 > self.screen_w*1.5:
+            self.offset_1 = -self.screen_w*1.5
+        elif self.offset_1 < -self.screen_w*1.5:
+            self.offset_1 = self.screen_w*1.5 
 
-        self.offset_2 = self.offset_1 + self.screen_w*2 if self.offset_1 <= 0 else self.offset_1 - self.screen_w*2
+        self.offset_2 = self.offset_1 + self.screen_w*1.5 if self.offset_1 <= 0 else self.offset_1 - self.screen_w*1.5
         
         # Blit the fog surface onto the screen
         self.screen.blit(self.img[0], (self.offset_1, y_pos))
@@ -614,22 +631,27 @@ class Fog:
 def main():
     import time
     SCREENSIZE = 1200, 800
+    PIXEL = False
 
     pygame.init()
     screen = pygame.display.set_mode(SCREENSIZE)
     clock = pygame.time.Clock()
 
     # Weather options: ['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog']
-    weather = Weather(screen, weather_types=['rain', 'snow', 'hail', 'lightning', 'fog'], pixel=False)
+    weather = Weather(screen, weather_types=['rain',  'snow', 'lightning', 'fog'], pixel=PIXEL)
+    bgrd = pygame.image.load(f'assets/forest_pixel.png').convert_alpha() if PIXEL else pygame.image.load(f'assets/img.webp').convert_alpha() 
+    bgrd = pygame.transform.scale(bgrd, (SCREENSIZE[0], SCREENSIZE[1]))
+
 
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return
+        
+        screen.blit(bgrd, (0,0))
 
         start_time = time.time()
-        screen.fill((0, 0, 0))
         weather.update()
         
         # Other game logic here
