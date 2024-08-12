@@ -71,7 +71,7 @@ def main():
 
     # GUI Options
     weather_options = ['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog']
-    wind_speeds = {'None':0, 'Low': 2, 'Medium': 5, 'High': 10, 'Extreme': 20}
+    wind_speeds = {'None':0, 'Low': 5, 'Medium': 15, 'High': 40, 'Extreme': 75}
     wind_dir = +1 #Is either +1 or -1 depending on side_wind_button
     selected_weather = []
     wind_speed = 0  # Default to None
@@ -197,6 +197,8 @@ def main():
 
                     # Return to the button selection screen
                     menu_on = True
+                    pygame.mixer.stop()
+
 
         else:
             pygame.display.flip()
