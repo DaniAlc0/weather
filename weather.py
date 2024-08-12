@@ -32,8 +32,6 @@ class Weather:
         
         self.sounds = []
         self.timer = 0  # Used to store time for the delay playing different sounds
-        self.wind_sounds = []
-        self.w_timer = 0 # Used to store time for the delay playing different wind sounds
 
         if weather_types is None:
             pass
@@ -62,6 +60,8 @@ class Weather:
             if 'fog' in weather_types:
                 self.effects['fog'] = Fog(screen, pixel=self.pixel)
 
+        self.initial_sounds = self.sounds.copy()
+
     def update(self) -> None:
         """
         Update and render all active weather effects.
@@ -84,10 +84,12 @@ class Weather:
         if len(self.sounds):
             new_timer = (pygame.time.get_ticks()//1320 + 1) % 20            
             if new_timer > self.timer:
+                volume = 1.5/(len(self.initial_sounds))    
                 self.timer = new_timer
                 pygame.mixer.find_channel().play(self.sounds[0], -1) # Plays sound in a loop
+                self.sounds[0].set_volume(volume)
                 self.sounds.pop(0) # Removes the sound from the list when it is already playing in loop 
-                print(f'playing sound. {len(self.sounds)} left to play')
+                print(f'{new_timer} playing sound at {volume*100 :.0f}% volume. {len(self.sounds)} left to play')
             
 
     def toggle_effect(self, effect_name: str) -> None:
@@ -142,12 +144,18 @@ class Wind:
         self.gusts = random.uniform(self.max_gusts / 2, self.max_gusts)
         self.freq_gusts: int = freq_gusts
 
+        self.wind_sounds = []
+        self.w_timer = 0 # Used to store time for the delay playing different wind sounds
+
         self.start_time = pygame.time.get_ticks()
-
-        for i in range(5):
+        
+        # Play sounds
+        for i in range(3):
             sound = pygame.mixer.Sound(f'assets/wind/{i+1}.mp3')
-            weather.wind_sounds.append(sound) 
+            self.wind_sounds.append(sound) 
+            pygame.mixer.find_channel().play(self.wind_sounds[i], -1)
 
+        # Update sèed at init
         self.update(weather)
             
 
@@ -179,14 +187,9 @@ class Wind:
         # Add the base value and the gust to get the total speed
         self.speed = base_wind + gusts_sum
 
-        #Play sounds
-        new_timer = (pygame.time.get_ticks()//1000+ 1) % len(weather.wind_sounds)
-
-        if new_timer > weather.w_timer:
-            weather.w_timer = new_timer
-            weather.wind_sounds[new_timer].play(-1)
-        
-        weather.wind_sounds[new_timer].set_volume(0.01*abs(base_wind))  
+        #Set wind volume according to its speed
+        for i in range(3):
+            self.wind_sounds[i].set_volume(((abs(base_wind)-3)*0.0025))  
 
 
 class Precip:
@@ -307,7 +310,7 @@ class Precip:
         def _reset_on_sides(self, left: bool) -> None:
             """Restart the drop on one side of the screen."""
             self.current_speed_y = self.ini_speed * random.uniform(1, 1.5)
-            if left:   self.pos = [-self.size[1], random.random() * self.screen_h]
+            if left:   self.pos = [-self.size[0], random.random() * self.screen_h]
             else:      self.pos = [self.screen_w, random.random() * self.screen_h]
 
         def render(self, screen: pygame.Surface, wind_speed: float) -> pygame.Rect | None:
@@ -362,7 +365,7 @@ class Rain(Precip):
     def __init__(self, weather, screen, height=150, width=10, initial_speed=15, acc=5, color=(150, 200, 255, 200), flake=False, num_drops=25):
         super().__init__(weather, screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color, flake=flake, num_drops=num_drops)
 
-        for i in range(6):
+        for i in range(4):
             sound = pygame.mixer.Sound(f'assets/rain/{i+1}.mp3')
             weather.sounds.append(sound) 
 
@@ -479,7 +482,7 @@ class Lightning:
     :param frequency: The frequency of lightning strikes, in milliseconds.
     """
 
-    def __init__(self, weather, screen: pygame.Surface, frequency: int = 3_000):
+    def __init__(self, weather, screen: pygame.Surface, frequency: int = 8_000):
         self.screen = screen
         self.frequency = frequency
         self.time_for_lightning = random.randint(self.frequency - self.frequency // 3, self.frequency + self.frequency // 3)
@@ -492,10 +495,10 @@ class Lightning:
         self.flash_step = 0
         self.step_duration = []
         
-        self.sounds = []
+        self.th_sounds = []
         for i in range(5):
             sound = pygame.mixer.Sound(f'assets/thunders/{i+1}.mp3')
-            self.sounds.append(sound) 
+            self.th_sounds.append(sound) 
 
     def update(self, wind_sp) -> None:
         """
@@ -540,7 +543,7 @@ class Lightning:
             
             else: #on the last 6 steps of self.flash_step_total  
                 if self.flash_step % 2 == 1:
-                    pygame.mixer.find_channel().play(self.sounds[random.randint(0,len(self.sounds)-1)]) 
+                    pygame.mixer.find_channel().play(self.th_sounds[random.randint(0,len(self.th_sounds)-1)]) 
             
             #If the time on this step is over, it will jump to the next one 
             if elapsed_time >= self.step_duration[self.flash_step]:
