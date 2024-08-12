@@ -27,16 +27,18 @@ class Weather:
         :param pixel: If True, snow and hail will be drawn as squares instead of circles.
         """
         self.screen = screen
-        self.pixel = pixel
-        self.effects = {}
-        
-        self.sounds = []
-        self.timer = 0  # Used to store time for the delay playing different sounds
+        self.pixel:bool = pixel
+        self.effects:dict = {} # dict that contains all current weather conditions. The key is a string and ther value the class itself. 
+
+        self.general_vol:float = 1.0  # From 0.0 to 1.0: Volume modificator for all sounds. 
+        self.sounds: list = []        # Empty list to store all sounds before playing them
+        self.channels: dict = {}      # Empty dict to store all the channels playing sounds and their initial volume 
+        self.timer:int = 0            # Used to store time for the delay playing different sounds
 
         if weather_types is None:
             pass
         else:
-            self.wind = Wind(self, wind_speed)  # Wind is always part of the system
+            self.wind = Wind(self, wind_speed, sound = True)  # Wind is always part of the system
 
             if 'rain' in weather_types:
                 self.effects['rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
@@ -60,6 +62,9 @@ class Weather:
             if 'fog' in weather_types:
                 self.effects['fog'] = Fog(screen, pixel=self.pixel)
 
+            else: 
+                raise Exception(f"Couldn't find a valid weather on weather_types list.")
+
         self.initial_sounds = self.sounds.copy()
 
     def update(self) -> None:
@@ -81,15 +86,22 @@ class Weather:
         pygame.display.update(upd_rects)  # Update only the rectangles that are changed
         
         #Play sounds
-        if len(self.sounds):
+        if self.sounds:
             new_timer = (pygame.time.get_ticks()//1320 + 1) % 20            
             if new_timer > self.timer:
                 volume = 1.5/(len(self.initial_sounds))    
+                
                 self.timer = new_timer
-                pygame.mixer.find_channel().play(self.sounds[0], -1) # Plays sound in a loop
-                self.sounds[0].set_volume(volume)
+
+                channel = pygame.mixer.find_channel() # Looks for an empty channel 
+                channel.play(self.sounds[0], -1) # Plays sound on this channel in a loop
+                
+                channel.set_volume(volume*self.general_vol)  
+                self.channels[channel] = volume
+
                 self.sounds.pop(0) # Removes the sound from the list when it is already playing in loop 
-                print(f'{new_timer} playing sound at {volume*100 :.0f}% volume. {len(self.sounds)} left to play')
+                print(f'{new_timer} playing sound at {volume*self.general_vol*100 :.0f}% volume. {len(self.sounds)} left to play')
+        
             
 
     def toggle_effect(self, effect_name: str) -> None:
@@ -120,6 +132,22 @@ class Weather:
         if 'lightning' in self.effects:
             self.effects['lightning'].frequency = frequency
 
+    def change_volume(self, new_vol):
+        '''
+        Sets the volume of all the sounds simulated
+        :param new_vol: float  # From 0.0 to 1.0. Being 0 completely silent and 1 the initial volume when the sound was created by the first time.
+        '''
+
+        if 0.0<= new_vol <= 1.0 :
+            self.general_vol = new_vol 
+            for channel, ini_vol in self.channels.items():
+                channel.set_volume(ini_vol*new_vol)  
+            
+            if 'lightning' in self.effects.keys():
+                self.effects['lightning'].gen_vol = new_vol
+
+        else:
+            raise ValueError
 
 class Wind:
     """
@@ -131,18 +159,20 @@ class Wind:
     :param freq_base: The frequency of the base wind speed variation. Ideally, from 0 to 100; more than 100 works but is too erratic.
     :param max_gusts: The maximum wind speed during gusts.
     :param freq_gusts: The frequency of the gusts. Ideally, from 0 to 100.
+    :param sound: boolean. If is True, wind sounds will be generated.
     """
 
-    def __init__(self, weather,  base_max_speed: int, amplitude: int = 55, freq_base: int = 50, max_gusts: int = 5, freq_gusts: int = 50):
-        self.reset(weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts)
+    def __init__(self, weather,  base_max_speed: int, amplitude: int = 55, freq_base: int = 50, max_gusts: int = 5, freq_gusts: int = 50, sound: bool = True):
+        self.reset(weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts, sound)
     
-    def reset(self, weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts):
+    def reset(self, weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts, sound):
         self.base_max_speed: int = base_max_speed
         self.freq_base: int = freq_base 
         self.amplitude: int = amplitude
         self.max_gusts:int = max_gusts
         self.gusts = random.uniform(self.max_gusts / 2, self.max_gusts)
         self.freq_gusts: int = freq_gusts
+        self.sound: bool = sound
 
         self.wind_sounds = []
         self.w_timer = 0 # Used to store time for the delay playing different wind sounds
@@ -150,12 +180,13 @@ class Wind:
         self.start_time = pygame.time.get_ticks()
         
         # Play sounds
-        for i in range(3):
-            sound = pygame.mixer.Sound(f'assets/weather/wind/{i+1}.mp3')
-            self.wind_sounds.append(sound) 
-            pygame.mixer.find_channel().play(self.wind_sounds[i], -1)
+        if sound: 
+            for i in range(3):
+                sound = pygame.mixer.Sound(f'assets/weather/wind/{i+1}.mp3')
+                self.wind_sounds.append(sound) 
+                pygame.mixer.find_channel().play(self.wind_sounds[i], -1)
 
-        # Update sèed at init
+        # Update speed at init
         self.update(weather)
             
 
@@ -188,8 +219,9 @@ class Wind:
         self.speed = base_wind + gusts_sum
 
         #Set wind volume according to its speed
-        for i in range(3):
-            self.wind_sounds[i].set_volume(((abs(base_wind)-3)*0.0025))  
+        if self.sound:
+            for i in range(3):
+                self.wind_sounds[i].set_volume(((abs(base_wind)-3)*0.0025*weather.general_vol))  
 
 
 class Precip:
@@ -494,7 +526,8 @@ class Lightning:
         self.flash_active = False
         self.flash_step = 0
         self.step_duration = []
-        
+
+        self.general_vol = weather.general_vol
         self.th_sounds = []
         for i in range(5):
             sound = pygame.mixer.Sound(f'assets/weather/thunders/{i+1}.mp3')
@@ -543,7 +576,9 @@ class Lightning:
             
             else: #on the last 6 steps of self.flash_step_total  
                 if self.flash_step % 2 == 1:
-                    pygame.mixer.find_channel().play(self.th_sounds[random.randint(0,len(self.th_sounds)-1)]) 
+                    chanel = pygame.mixer.find_channel()
+                    chanel.set_volume(self.general_vol)
+                    chanel.play(self.th_sounds[random.randint(0,len(self.th_sounds)-1)]) 
             
             #If the time on this step is over, it will jump to the next one 
             if elapsed_time >= self.step_duration[self.flash_step]:
