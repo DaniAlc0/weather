@@ -151,7 +151,7 @@ class Wind:
         
         # Play sounds
         for i in range(3):
-            sound = pygame.mixer.Sound(f'assets/wind/{i+1}.mp3')
+            sound = pygame.mixer.Sound(f'assets/weather/wind/{i+1}.mp3')
             self.wind_sounds.append(sound) 
             pygame.mixer.find_channel().play(self.wind_sounds[i], -1)
 
@@ -366,7 +366,7 @@ class Rain(Precip):
         super().__init__(weather, screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color, flake=flake, num_drops=num_drops)
 
         for i in range(4):
-            sound = pygame.mixer.Sound(f'assets/rain/{i+1}.mp3')
+            sound = pygame.mixer.Sound(f'assets/weather/rain/{i+1}.mp3')
             weather.sounds.append(sound) 
 
             
@@ -432,7 +432,7 @@ class Hail(Precip):
         super().__init__(weather=weather, screen=screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color,
                          flake=flake, num_drops=num_drops, pixel=pixel, is_hail=is_hail)
         for i in range(3):
-            sound = pygame.mixer.Sound(f'assets/hail/{i+1}.mp3')
+            sound = pygame.mixer.Sound(f'assets/weather/hail/{i+1}.mp3')
             weather.sounds.append(sound)         
 
     class Drop(Precip.Drop):
@@ -497,7 +497,7 @@ class Lightning:
         
         self.th_sounds = []
         for i in range(5):
-            sound = pygame.mixer.Sound(f'assets/thunders/{i+1}.mp3')
+            sound = pygame.mixer.Sound(f'assets/weather/thunders/{i+1}.mp3')
             self.th_sounds.append(sound) 
 
     def update(self, wind_sp) -> None:
@@ -579,8 +579,8 @@ class Fog:
 
     def load_images(self, density, color, pixel):
         # Load images
-        if pixel: img = pygame.image.load(f'assets/NoisePix.png').convert_alpha()  # Available at https://danialc0.itch.io/tileable-fog 
-        else:     img = pygame.image.load(f'assets/NoiseReg.png').convert_alpha() 
+        if pixel: img = pygame.image.load(f'assets/weather/NoisePix.png').convert_alpha()  # Available at https://danialc0.itch.io/tileable-fog 
+        else:     img = pygame.image.load(f'assets/weather/NoiseReg.png').convert_alpha() 
         img = pygame.transform.scale(img, (self.screen_w*1.5 - 1, self.screen_h * 2))
         img.set_alpha(int(255*density))
         
@@ -642,7 +642,7 @@ def main():
 
     # Weather options: ['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog']
     weather = Weather(screen, weather_types=['rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog'], pixel=PIXEL)
-    bgrd = pygame.image.load(f'assets/imgpix.webp').convert_alpha() if PIXEL else pygame.image.load(f'assets/img.webp').convert_alpha() 
+    bgrd = pygame.image.load(f'assets/weather/imgpix.webp').convert_alpha() if PIXEL else pygame.image.load(f'assets/weather/img.webp').convert_alpha() 
     bgrd = pygame.transform.scale(bgrd, (SCREENSIZE[0], SCREENSIZE[1]))
 
 
