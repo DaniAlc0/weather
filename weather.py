@@ -132,7 +132,7 @@ class Weather:
         if 'lightning' in self.effects:
             self.effects['lightning'].frequency = frequency
 
-    def change_volume(self, new_vol):
+    def change_volume(self, new_vol: float | bool | int):
         '''
         Sets the volume of all the sounds simulated
         :param new_vol: float  # From 0.0 to 1.0. Being 0 completely silent and 1 the initial volume when the sound was created by the first time.
@@ -147,7 +147,7 @@ class Weather:
                 self.effects['lightning'].gen_vol = new_vol
 
         else:
-            raise ValueError
+            raise ValueError('New volume must be between 0(silent) and 1(loudest)')
 
 class Wind:
     """
