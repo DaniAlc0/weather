@@ -16,17 +16,18 @@ pygame.mixer.set_num_channels(24)
 
 class Weather:
     
-    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int|float = 30, pixel: bool = False):
+    def __init__(self, screen: pygame.Surface, weather_types: list[str] = None, wind_speed: int = 30, pixel: bool = False):
         """
         Initialize the Weather system.
 
         :param screen: The Pygame screen where the weather effects will be drawn.
         :param weather_types: List of weather effects to initialize.
                               Supported types: 'rain', 'acid rain', 'snow', 'hail', 'lightning', 'fog'.
-        :param wind_speed: Maximum wind speed. Positive is right direction and negative is left.
+        :param wind_speed: Maximum wind speed between 0 and 100 ideally. Positive is right direction and negative is left. If it's exacly 0 there won't be any wind nor gusts.
         :param pixel: If True, snow and hail will be drawn as squares instead of circles.
         """
         self.screen = screen
+        self.wind_speed = wind_speed
         self.pixel:bool = pixel
         self.effects:dict = {} # dict that contains all current weather conditions. The key is a string and ther value the class itself. 
 
@@ -38,15 +39,16 @@ class Weather:
         if weather_types is None:
             pass
         else:
-            self.wind = Wind(self, wind_speed, sound = True)  # Wind is always part of the system
+            if wind_speed:
+                self.wind = Wind(self, wind_speed, sound = True)  
 
             if 'rain' in weather_types:
                 self.effects['rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
-                                            color=(150, 200, 255, 155), flake=False, num_drops=80)
+                                            color=(150, 200, 255, 155), flake=False, num_drops=30)
 
             if 'acid rain' in weather_types:
                 self.effects['acid rain'] = Rain(self, screen, width=10, height=150, initial_speed=15, acc=50,
-                                                 color=(150, 255, 155, 155), flake=False, num_drops=80)
+                                                 color=(150, 255, 155, 155), flake=False, num_drops=30)
 
             if 'snow' in weather_types:
                 self.effects['snow'] = Snow(self, screen, width=25, height=40, initial_speed=2, acc=1, color=(255, 255, 255, 255),
@@ -54,7 +56,7 @@ class Weather:
 
             if 'hail' in weather_types:
                 self.effects['hail'] = Hail(self, screen, width=25, height=50, initial_speed=30, acc=20,
-                                            color=(220, 220, 220, 220), flake=True, num_drops=40, pixel=self.pixel)
+                                            color=(220, 220, 220, 220), flake=True, num_drops=30, pixel=self.pixel)
 
             if 'lightning' in weather_types:
                 self.effects['lightning'] = Lightning(self, screen)
@@ -62,24 +64,22 @@ class Weather:
             if 'fog' in weather_types:
                 self.effects['fog'] = Fog(screen, pixel=self.pixel)
 
-            else: 
-                raise Exception(f"Couldn't find a valid weather on weather_types list.")
-
         self.initial_sounds = self.sounds.copy()
 
     def update(self) -> None:
         """
         Update and render all active weather effects.
         """
+        
         # Update wind and apply to other effects
-        self.wind.update(self)
-
+        current_wind_speed = self.wind.update(self) if self.wind_speed else 0
+        
         # Update each other weather effect
         upd_rects = []
 
         for effect_name in ['lightning', 'fog', 'snow', 'rain', 'acid rain', 'hail']:
             if effect_name in self.effects:
-                updated_rect = self.effects[effect_name].update(self.wind.speed)
+                updated_rect = self.effects[effect_name].update(current_wind_speed)
                 if updated_rect is not None:
                     upd_rects.extend(updated_rect)
 
@@ -87,7 +87,7 @@ class Weather:
         
         #Play sounds
         if self.sounds:
-            new_timer = (pygame.time.get_ticks()//1320 + 1) % 20            
+            new_timer = (pygame.time.get_ticks()//656 + 1) % 20            
             if new_timer > self.timer:
                 volume = 1.5/(len(self.initial_sounds))    
                 
@@ -100,9 +100,8 @@ class Weather:
                 self.channels[channel] = volume
 
                 self.sounds.pop(0) # Removes the sound from the list when it is already playing in loop 
-                print(f'{new_timer} playing sound at {volume*self.general_vol*100 :.0f}% volume. {len(self.sounds)} left to play')
+                # print(f'sec:{new_timer} playing sound at {volume*self.general_vol*100 :.0f}% volume. {len(self.sounds)} left to play')
         
-            
 
     def toggle_effect(self, effect_name: str) -> None:
         """Toggle the visibility of a specific weather effect."""
@@ -162,7 +161,7 @@ class Wind:
     :param sound: boolean. If is True, wind sounds will be generated.
     """
 
-    def __init__(self, weather,  base_max_speed: int, amplitude: int = 55, freq_base: int = 50, max_gusts: int = 5, freq_gusts: int = 50, sound: bool = True):
+    def __init__(self, weather,  base_max_speed: int, amplitude: int = 55, freq_base: int = 50, max_gusts: int = 3, freq_gusts: int = 50, sound: bool = True):
         self.reset(weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts, sound)
     
     def reset(self, weather, base_max_speed, amplitude, freq_base, max_gusts, freq_gusts, sound):
@@ -190,9 +189,9 @@ class Wind:
         self.update(weather)
             
 
-    def update(self, weather) -> None:
+    def update(self, weather) -> float:
         """
-        Update the wind speed based on the current time and sinusoidal variations.
+        Update the wind speed based on the current time and sinusoidal variations. Returns the speed value at this moment
         """
         t = (pygame.time.get_ticks() - self.start_time) / 1000  # Time in seconds
 
@@ -223,8 +222,10 @@ class Wind:
             for i in range(3):
                 self.wind_sounds[i].set_volume(((abs(base_wind)-3)*0.0025*weather.general_vol))  
 
+        return self.speed
 
-class Precip:
+
+class Precipitation:
     """
     Base class for precipitation effects such as rain, snow, or hail.
 
@@ -237,7 +238,7 @@ class Precip:
     :param height: Max height of each drop.
     :param initial_speed: Max initial speed for each drop.
     :param acc: Max acceleration for each drop.
-    :param color: A tuple representing the RGBA color of the drops.
+    :param color: A tuple representing the RGB+Alpha color of the drops.
     :param num_drops: The number of drops to generate. There will always be this quantity on the screen.
     :param flake: If True, a circle (or square, if pixel is True) will be drawn at the lower part of the sprite.
     :param pixel: If True, the flake will be drawn as a square instead of a circle.
@@ -248,45 +249,49 @@ class Precip:
         self.screen = screen
         self.width = width
         self.height = height
+        self.initial_speed = initial_speed
+        self.acc = acc
+        self.flake = flake
+        self.is_hail = is_hail
         self.color = color
         self.pixel = pixel
 
         self.num_drops = num_drops
-        self.create_drops(screen, initial_speed, acc, num_drops, flake, is_hail)
+        self.drops = [] #List to store all the drops from the current class
 
-    def create_drops(self, screen, initial_speed, acc, num_drops, flake, is_hail):
-        self.drops = []
-        for drop in range(num_drops):
-            scale = 0.35 + 0.65 * (num_drops - drop) / num_drops
-            weight = scale*0.9
-            w, h = int(scale * self.width), int(scale * self.height)
-            speed = scale * initial_speed
-            acceleration = scale * acc / 100  # The bigger the more it accelerates
 
-            pic = pygame.Surface((w, h), pygame.SRCALPHA, 32).convert_alpha()
-            r, g, b, a = self.color
+    def create_drop(self, screen, initial_speed, acc, flake, is_hail):
 
-            transparency_tail_x = [1 - abs((i - w // 2) / (w // 2)) for i in range(w)]
-            transparency_tail_y = (a * scale) / h
+        scale = 0.35 + 0.65 * random.random()
+        weight = scale*0.9
+        w, h = int(scale * self.width), int(scale * self.height)
+        speed = scale * initial_speed
+        acceleration = scale * acc / 100  # The bigger the more it accelerates
 
-            for j in range(h - w):
-                for i in range(w):
-                    alphax = transparency_tail_x[i] ** 2
-                    alphay = transparency_tail_y * j
-                    rect = (i, j, 1, 1)  # Pixel in position i,j
-                    pic.fill((r, g, b, int(alphay * alphax)), rect)
+        pic = pygame.Surface((w, h), pygame.SRCALPHA, 32).convert_alpha()
+        r, g, b, a = self.color
 
-            if flake:
-                weight /= 2
-                if self.pixel:
-                    pygame.draw.rect(pic, (r, g, b, 255), (w // 4, h - w, w // 2, w // 2))
-                else:
-                    pygame.draw.circle(pic, (r, g, b, 255), (w // 2, h - w), w // 4)
+        transparency_tail_x = [1 - abs((i - w // 2) / (w // 2)) for i in range(w)]
+        transparency_tail_y = (a * scale) / h
 
-            if is_hail: new_drop = Hail.Drop(speed, acceleration, weight, pic, screen)
-            else: new_drop = Precip.Drop(speed, acceleration, weight, pic, screen)
-            
-            self.drops.append(new_drop)
+        for j in range(h - w):
+            for i in range(w):
+                alphax = transparency_tail_x[i] ** 2
+                alphay = transparency_tail_y * j
+                rect = (i, j, 1, 1)  # Pixel in position i,j
+                pic.fill((r, g, b, int(alphay * alphax)), rect)
+
+        if flake:
+            weight /= 2
+            if self.pixel:
+                pygame.draw.rect(pic, (r, g, b, 255), (w // 4, h - w, w // 2, w // 2))
+            else:
+                pygame.draw.circle(pic, (r, g, b, 255), (w // 2, h - w), w // 4)
+
+        if is_hail: new_drop = Hail.Drop(speed, acceleration, weight, pic, screen)
+        else: new_drop = Precipitation.Drop(speed, acceleration, weight, pic, screen)
+        
+        self.drops.append(new_drop)
 
     def update(self, wind_speed: float = 0) -> list[pygame.Rect]:
         """
@@ -295,7 +300,14 @@ class Precip:
         :param wind_speed: The current speed of the wind affecting the precipitation.
         :return: A list of rectangles to be updated.
         """
-        
+
+        # Add or delete drops until there are the same as self.num_drops
+        if len(self.drops) < self.num_drops:
+            self.create_drop(self.screen, self.initial_speed, self.acc, self.flake, self.is_hail)
+        elif len(self.drops) > self.num_drops:
+            del self.drops[0]
+
+        # Update the rectangles where the drops are now and where they were in the last loop.
         update_rects = []
         for drop in self.drops:
             r = drop.render(self.screen, wind_speed)
@@ -393,7 +405,7 @@ class Precip:
 
             return rect
 
-class Rain(Precip):
+class Rain(Precipitation):
     def __init__(self, weather, screen, height=150, width=10, initial_speed=15, acc=5, color=(150, 200, 255, 200), flake=False, num_drops=25):
         super().__init__(weather, screen, height=height, width=width, initial_speed=initial_speed, acc=acc, color=color, flake=flake, num_drops=num_drops)
 
@@ -403,9 +415,9 @@ class Rain(Precip):
 
             
 
-class Snow(Precip):
+class Snow(Precipitation):
     """
-    Class representing snow precipitation.
+    Class representing snow Precipitationitation.
 
     Snowflakes can be drawn as circles or squares, depending on the 'pixel' parameter.
 
@@ -440,7 +452,7 @@ class Snow(Precip):
         return rect
 
 
-class Hail(Precip):
+class Hail(Precipitation):
     """
     Class representing hail precipitation.
 
@@ -467,7 +479,7 @@ class Hail(Precip):
             sound = pygame.mixer.Sound(f'assets/weather/hail/{i+1}.mp3')
             weather.sounds.append(sound)         
 
-    class Drop(Precip.Drop):
+    class Drop(Precipitation.Drop):
         """A single hailstone drop, with the ability to bounce."""
 
         def __init__(self, speed: float, acc: float, weight:float, pic: pygame.Surface, screen: pygame.Surface):
