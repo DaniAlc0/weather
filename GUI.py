@@ -103,8 +103,8 @@ def main():
     running = True
 
     # Load images
-    bgrnd_px   = pygame.image.load(f'assets/imgpix.webp').convert_alpha() 
-    bgrnd_norm = pygame.image.load(f'assets/img.webp').convert_alpha() 
+    bgrnd_px   = pygame.image.load(f'assets/weather/imgpix.webp').convert_alpha() 
+    bgrnd_norm = pygame.image.load(f'assets/weather/img.webp').convert_alpha() 
     bgrnd_px   = pygame.transform.scale(bgrnd_px, (SCREENSIZE[0], SCREENSIZE[1]))
     bgrnd_norm = pygame.transform.scale(bgrnd_norm, (SCREENSIZE[0], SCREENSIZE[1]))
 
